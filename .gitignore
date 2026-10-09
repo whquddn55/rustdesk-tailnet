@@ -1,0 +1,8 @@
+/data/
+/dist/
+/deploy/data/
+/deploy/.env
+*.db
+*.db-shm
+*.db-wal
+/rustdesk-tailnet-api

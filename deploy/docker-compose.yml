@@ -1,0 +1,54 @@
+# RustDesk 자체 호스팅 묶음: API(이 저장소) + 공식 hbbs/hbbr.
+# 모든 포트는 서버 PC 의 Tailscale IP(${TS_IP}) 에만 열린다.
+#
+# 사용:  cd deploy && cp .env.example .env && (TS_IP 채우기) && docker compose up -d --build
+name: rustdesk
+
+services:
+  # API 서버. network_mode: host 를 쓰는 이유:
+  #  1) 앱이 LISTEN_ADDR(=${TS_IP}:21114) 에만 bind 하고, Tailscale 대역이 아니면 시작을 거부한다.
+  #     bridge 네트워크에서는 컨테이너 안에 Tailscale IP 가 없어 이 검사를 지킬 수 없다.
+  #  2) 403 방어가 실제 접속 원본 IP 를 봐야 한다. bridge + docker-proxy 경로에서는 원본이
+  #     브리지 게이트웨이(172.x)로 바뀔 수 있다.
+  # 앱이 특정 IP 하나에만 bind 하므로 host 모드여도 다른 인터페이스(공인/LAN)에는 열리지 않는다.
+  api:
+    build:
+      context: ..
+    image: rustdesk-tailnet-api:local
+    network_mode: host
+    environment:
+      LISTEN_ADDR: "${TS_IP:?TS_IP 를 .env 에 설정하세요}:21114"
+      DB_PATH: /data/api.db
+      TOKEN_TTL: "${TOKEN_TTL:-720h}"
+    volumes:
+      - api-data:/data
+    restart: unless-stopped
+
+  # ID/랑데부 서버. hbbs 에는 bind 주소 옵션이 없으므로 bridge 네트워크 + Tailscale IP 로만 publish.
+  #  21115/tcp NAT 유형 검사, 21116/tcp+udp ID 등록·홀펀칭.
+  #  21118(웹 클라이언트용 websocket)은 쓰지 않으므로 열지 않는다.
+  hbbs:
+    image: "rustdesk/rustdesk-server:${RUSTDESK_SERVER_TAG:-1.1.16}"
+    command: ["hbbs", "-r", "${TS_IP:?TS_IP 를 .env 에 설정하세요}:21117"]
+    ports:
+      - "${TS_IP:?}:21115:21115/tcp"
+      - "${TS_IP:?}:21116:21116/tcp"
+      - "${TS_IP:?}:21116:21116/udp"
+    volumes:
+      - ./data/rustdesk:/root   # id_ed25519 / id_ed25519.pub (클라이언트 Key) 가 여기에 생긴다
+    depends_on:
+      - hbbr
+    restart: unless-stopped
+
+  # 릴레이 서버. 21117/tcp 만 사용 (21119 websocket 은 열지 않음). hbbs 와 같은 키를 쓴다.
+  hbbr:
+    image: "rustdesk/rustdesk-server:${RUSTDESK_SERVER_TAG:-1.1.16}"
+    command: ["hbbr"]
+    ports:
+      - "${TS_IP:?}:21117:21117/tcp"
+    volumes:
+      - ./data/rustdesk:/root
+    restart: unless-stopped
+
+volumes:
+  api-data:

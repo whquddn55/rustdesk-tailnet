@@ -1,0 +1,6 @@
+.git
+data
+deploy
+*.db
+*.db-*
+dist
