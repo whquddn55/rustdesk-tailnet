@@ -534,20 +534,20 @@ func (s *Store) UnbindDevice(ctx context.Context, uuid string, userID int64) err
 
 // Heartbeat updates last-seen/IP for a device, creating a bare row if needed.
 // It reports whether the server still needs the device's sysinfo.
-func (s *Store) Heartbeat(ctx context.Context, rustdeskID, uuid, ip string) (needSysinfo bool, err error) {
+func (s *Store) Heartbeat(ctx context.Context, rustdeskID, uuid, ip string) (needSysinfo, bound bool, err error) {
 	now := s.now().Unix()
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO devices(uuid, rustdesk_id, last_ip, last_seen, created_at) VALUES(?, ?, ?, ?, ?)
 		ON CONFLICT(uuid) DO UPDATE SET rustdesk_id = excluded.rustdesk_id, last_ip = excluded.last_ip, last_seen = excluded.last_seen`,
 		uuid, rustdeskID, ip, now, now)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	var sysinfoAt sql.NullInt64
-	if err := s.db.QueryRowContext(ctx, `SELECT sysinfo_at FROM devices WHERE uuid = ?`, uuid).Scan(&sysinfoAt); err != nil {
-		return false, err
+	var sysinfoAt, userID sql.NullInt64
+	if err := s.db.QueryRowContext(ctx, `SELECT sysinfo_at, user_id FROM devices WHERE uuid = ?`, uuid).Scan(&sysinfoAt, &userID); err != nil {
+		return false, false, err
 	}
-	return !sysinfoAt.Valid, nil
+	return !sysinfoAt.Valid, userID.Valid, nil
 }
 
 // Sysinfo holds the fields of the client's /api/sysinfo body that we keep.

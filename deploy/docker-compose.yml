@@ -20,8 +20,12 @@ services:
       LISTEN_ADDR: "${TS_IP:?TS_IP 를 .env 에 설정하세요}:21114"
       DB_PATH: /data/api.db
       TOKEN_TTL: "${TOKEN_TTL:-720h}"
+      # Pushed to every logged-in device as its ID / relay / API server and Key.
+      SERVER_HOST: "${SERVER_HOST:-${TS_IP}}"
+      HBBS_KEY_FILE: /rustdesk/id_ed25519.pub
     volumes:
       - api-data:/data
+      - ./data/rustdesk:/rustdesk:ro
     restart: unless-stopped
 
   # ID/랑데부 서버. hbbs 에는 bind 주소 옵션이 없으므로 bridge 네트워크 + Tailscale IP 로만 publish.

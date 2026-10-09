@@ -23,23 +23,29 @@ RustDesk 공식 클라이언트가 그대로 붙는 **자체 API 서버**(Go). T
 
 ## 서버 PC 설치 (Linux + Docker + Tailscale)
 
-1. 서버 PC 에 Tailscale 을 설치하고 tailnet 에 붙인다. IP 확인:
+1. 서버 PC 에 Tailscale 을 설치하고 tailnet 에 붙인다. Tailscale 관리 화면에서 이 기기 이름을 `thuthi-scale` 로 바꾼다
+   (포크 클라이언트의 기본 API 주소가 `http://rustdesk-server.example.ts.net:21114` 다). IP 확인:
    ```sh
    tailscale ip -4        # 예: 100.101.102.103
    ```
-2. 이 저장소를 서버 PC 에 복사한 뒤:
+2. 이 저장소를 서버 PC 에 복사한다. **기존 Key 를 그대로 쓰려면** 처음 띄우기 전에 옛 서버의 키 두 개를 복사해 둔다
+   (hbbs 는 키가 없을 때만 새로 만든다):
    ```sh
    cd rustdesk-tailnet-api/deploy
+   mkdir -p data/rustdesk
+   cp <옛 서버>/id_ed25519 <옛 서버>/id_ed25519.pub data/rustdesk/
+   ```
+3. 설정하고 띄운다:
+   ```sh
    cp .env.example .env
-   vi .env                # TS_IP=100.101.102.103
+   vi .env                # TS_IP=100.101.102.103, SERVER_HOST=rustdesk-server.example.ts.net
    docker compose up -d --build
    docker compose ps
    ```
-3. hbbs 가 처음 뜰 때 키를 만든다. 클라이언트의 Key 칸에 넣을 값:
-   ```sh
-   cat data/rustdesk/id_ed25519.pub
-   ```
-   (`data/rustdesk/id_ed25519` 개인 키는 백업하되 외부로 내보내지 말 것.)
+4. 사용자 · 그룹을 만든다 (아래 "사용자 · 그룹 관리").
+
+로그인한 기기는 heartbeat 응답(`strategy`)으로 ID 서버 · 릴레이 · API 서버(`SERVER_HOST`)와 Key(`data/rustdesk/id_ed25519.pub`)를 받아 저장한다.
+기기마다 서버 칸을 채울 필요가 없고, 키를 바꾸면 다음 heartbeat 때 모든 기기에 퍼진다. `data/rustdesk/id_ed25519` 개인 키는 백업하되 외부로 내보내지 말 것.
 
 ### 열리는 포트 (모두 `${TS_IP}` 에만)
 
@@ -100,19 +106,22 @@ rdapi device del 123456789
 
 ## 클라이언트 설정
 
-RustDesk → 설정 → 네트워크 → ID/릴레이 서버. 주소는 모두 서버 PC 의 **Tailscale IP** 또는 **MagicDNS 이름**(예: `rdserver.tail1234.ts.net`).
+**포크 클라이언트(`rustdesk-tailnet`)**: 설치하고 로그인만 한다. API 서버 주소는 빌드 기본값(`http://rustdesk-server.example.ts.net:21114`)이고,
+로그인하면 ID 서버 · 릴레이 · Key 가 계정 설정으로 내려온다. 기본 API 주소가 다르면 설정 → 네트워크의 API 서버 칸 하나만 바꾼다.
+
+**공식 클라이언트**: RustDesk → 설정 → 네트워크 → ID/릴레이 서버에 직접 넣는다. 주소는 모두 서버 PC 의 Tailscale IP 또는 MagicDNS 이름이다.
 
 | 칸 | 값 | 비고 |
 |---|---|---|
-| ID 서버 | `100.101.102.103` | 포트 생략 시 21116 |
-| 릴레이 서버 | `100.101.102.103` | 비워도 hbbs 가 `-r` 값을 알려 준다 |
-| API 서버 | `http://100.101.102.103:21114` | **http** 로 쓸 것. 비워 두면 클라이언트가 `http://<ID 서버>:21114` 로 정한다 (`src/common.rs:1146-1153`) |
+| ID 서버 | `rustdesk-server.example.ts.net` | 포트 생략 시 21116 |
+| 릴레이 서버 | `rustdesk-server.example.ts.net` | 비워도 hbbs 가 `-r` 값을 알려 준다 |
+| API 서버 | `http://rustdesk-server.example.ts.net:21114` | **http** 로 쓸 것 |
 | Key | `data/rustdesk/id_ed25519.pub` 내용 | |
 
-그다음 클라이언트에서 **로그인**(위에서 만든 계정)한다. 같은 그룹 사용자의 기기가 "그룹" 탭에 사용자별로, 그리고 그룹 이름(device group) 아래에 모두 나온다.
-기기가 목록에 나오려면 그 기기에서 한 번은 로그인해야 한다(로그인/현재 사용자 조회 때 기기가 사용자에게 묶인다). 로그아웃하면 그 기기는 목록에서 빠진다.
+로그인하면 같은 그룹 사용자의 기기가 "그룹" 탭에 사용자별로, 그리고 그룹 이름(device group) 아래에 모두 나온다.
+기기가 목록에 나오려면 그 기기에서 한 번은 로그인해야 한다. 로그아웃하면 그 기기는 목록에서 빠진다. 접속할 때는 상대 기기의 비밀번호를 넣는다.
 
-> MagicDNS 이름은 클라이언트 칸에만 쓴다. 서버의 `TS_IP`/`LISTEN_ADDR` 은 반드시 IP 숫자로 넣는다.
+> 서버의 `TS_IP`/`LISTEN_ADDR` 은 반드시 IP 숫자로 넣는다. MagicDNS 이름은 `SERVER_HOST` 와 클라이언트 쪽에만 쓴다.
 
 ## 공유기 포트 포워딩을 닫을 것
 

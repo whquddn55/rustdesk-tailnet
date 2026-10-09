@@ -30,6 +30,7 @@ type Config struct {
 	Guard    netguard.Policy
 	TokenTTL time.Duration
 	Logger   *log.Logger
+	Settings ServerSettings
 }
 
 // Server is the HTTP handler.
@@ -38,6 +39,7 @@ type Server struct {
 	guard  netguard.Policy
 	ttl    time.Duration
 	log    *log.Logger
+	cfg    ServerSettings
 	mux    *http.ServeMux
 	handle http.Handler
 }
@@ -50,7 +52,7 @@ func New(cfg Config) *Server {
 	if cfg.Logger == nil {
 		cfg.Logger = log.New(io.Discard, "", 0)
 	}
-	s := &Server{st: cfg.Store, guard: cfg.Guard, ttl: cfg.TokenTTL, log: cfg.Logger, mux: http.NewServeMux()}
+	s := &Server{st: cfg.Store, guard: cfg.Guard, ttl: cfg.TokenTTL, log: cfg.Logger, cfg: cfg.Settings, mux: http.NewServeMux()}
 	s.routes()
 	s.handle = cfg.Guard.Middleware(s.mux)
 	return s
@@ -256,14 +258,15 @@ func (s *Server) currentUser(w http.ResponseWriter, r *http.Request) {
 
 // heartbeat: the client parses the reply as a JSON object and looks for the
 // optional keys "sysinfo" (force re-upload), "disconnect", "modified_at",
-// "strategy" (sync.rs:249-273). We only ever send "sysinfo".
+// "strategy" (sync.rs:249-273). We send "sysinfo", and "strategy" with the
+// server settings to devices bound to a logged-in user.
 func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 	var req heartbeatRequest
 	if err := decodeJSON(w, r, maxJSONBody, &req); err != nil || req.ID == "" || req.UUID == "" {
 		writeError(w, http.StatusBadRequest, "id and uuid required")
 		return
 	}
-	need, err := s.st.Heartbeat(r.Context(), req.ID, req.UUID, remoteIP(r))
+	need, bound, err := s.st.Heartbeat(r.Context(), req.ID, req.UUID, remoteIP(r))
 	if err != nil {
 		s.log.Printf("heartbeat %s: %v", req.ID, err)
 		writeError(w, http.StatusInternalServerError, "Internal error")
@@ -272,6 +275,13 @@ func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]any{}
 	if need {
 		resp["sysinfo"] = true
+	}
+	if opts := s.cfg.options(); bound && opts != nil {
+		v := version(opts)
+		resp["modified_at"] = v
+		if req.ModifiedAt != v {
+			resp["strategy"] = map[string]any{"config_options": opts}
+		}
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

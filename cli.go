@@ -49,6 +49,8 @@ Environment:
   DB_PATH         SQLite file (default ./data/api.db)
   TOKEN_TTL       login token lifetime, Go duration (default 720h); sliding
   ALLOW_LOOPBACK  "1" to also accept 127.0.0.1/::1 — local testing only, default off
+  SERVER_HOST     ID/relay/API host pushed to logged-in devices (default: LISTEN_ADDR host)
+  HBBS_KEY_FILE   hbbs public key file pushed as the client Key, e.g. /rustdesk/id_ed25519.pub
 `
 
 func dbPath() string {
@@ -124,6 +126,16 @@ func serverConfig() (listen string, policy netguard.Policy, ttl time.Duration, e
 	return
 }
 
+// serverSettings is what logged-in devices receive as their ID / relay / API
+// server and key (see api.ServerSettings).
+func serverSettings(listen string) api.ServerSettings {
+	host := os.Getenv("SERVER_HOST")
+	if host == "" {
+		host, _, _ = net.SplitHostPort(listen)
+	}
+	return api.ServerSettings{Host: host, KeyFile: os.Getenv("HBBS_KEY_FILE")}
+}
+
 func serve(args []string) error {
 	if len(args) > 0 {
 		return fmt.Errorf("serve takes no arguments (configure with environment variables)")
@@ -146,8 +158,12 @@ func serve(args []string) error {
 	if err != nil {
 		return fmt.Errorf("listen %s: %w (is Tailscale up on this machine?)", listen, err)
 	}
+	settings := serverSettings(listen)
+	if settings.KeyFile == "" {
+		logger.Printf("WARNING: HBBS_KEY_FILE is not set; devices will not receive the server key.")
+	}
 	srv := &http.Server{
-		Handler:           api.New(api.Config{Store: st, Guard: policy, TokenTTL: ttl, Logger: logger}),
+		Handler:           api.New(api.Config{Store: st, Guard: policy, TokenTTL: ttl, Logger: logger, Settings: settings}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      60 * time.Second,

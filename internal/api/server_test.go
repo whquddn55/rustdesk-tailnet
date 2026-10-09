@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -431,5 +432,63 @@ func TestHarmlessEndpoints(t *testing.T) {
 	}
 	if rec := e.do("GET", "/api/unknown", "", tsIP, nil); rec.Code != 404 {
 		t.Errorf("unknown: %d", rec.Code)
+	}
+}
+
+func TestHeartbeatPushesServerSettingsToLoggedInDevices(t *testing.T) {
+	e := newEnv(t)
+	keyFile := filepath.Join(t.TempDir(), "id_ed25519.pub")
+	if err := os.WriteFile(keyFile, []byte("SERVERKEY=\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.srv.cfg = ServerSettings{Host: "thuthi-scale.example.ts.net", KeyFile: keyFile}
+	if _, err := e.st.AddGroup(t.Context(), "home"); err != nil {
+		t.Fatal(err)
+	}
+	e.mustUser("alice", "pw-alice", "home")
+
+	type strategy struct {
+		ConfigOptions map[string]string `json:"config_options"`
+	}
+	type reply struct {
+		ModifiedAt int64     `json:"modified_at"`
+		Strategy   *strategy `json:"strategy"`
+	}
+	beat := func(uuid string, modifiedAt int64) reply {
+		return decode[reply](t, e.do("POST", "/api/heartbeat", "", tsIP, map[string]any{
+			"id": "111", "uuid": uuid, "modified_at": modifiedAt,
+		}))
+	}
+
+	if r := beat("dev-1", 0); r.Strategy != nil {
+		t.Fatalf("device not logged in got a strategy: %+v", r)
+	}
+
+	e.login("alice", "pw-alice", "111", "dev-1", tsIP)
+	r := beat("dev-1", 0)
+	if r.Strategy == nil {
+		t.Fatal("logged-in device got no strategy")
+	}
+	want := map[string]string{
+		"custom-rendezvous-server": "thuthi-scale.example.ts.net",
+		"relay-server":             "thuthi-scale.example.ts.net",
+		"api-server":               "http://thuthi-scale.example.ts.net:21114",
+		"key":                      "SERVERKEY=",
+	}
+	for k, v := range want {
+		if r.Strategy.ConfigOptions[k] != v {
+			t.Errorf("%s = %q, want %q", k, r.Strategy.ConfigOptions[k], v)
+		}
+	}
+
+	if again := beat("dev-1", r.ModifiedAt); again.Strategy != nil || again.ModifiedAt != r.ModifiedAt {
+		t.Fatalf("unchanged settings were resent: %+v", again)
+	}
+
+	if err := os.WriteFile(keyFile, []byte("NEWKEY=\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if changed := beat("dev-1", r.ModifiedAt); changed.Strategy == nil || changed.Strategy.ConfigOptions["key"] != "NEWKEY=" {
+		t.Fatalf("new key was not pushed: %+v", changed)
 	}
 }
