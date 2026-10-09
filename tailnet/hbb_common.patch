@@ -1,0 +1,209 @@
+diff --git a/src/config.rs b/src/config.rs
+index 6fe1004..b08ba48 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -1517,6 +1517,7 @@ impl Config {
+     }
+ 
+     #[inline]
++    #[allow(dead_code)]
+     fn get_socks_from_custom_client_advanced_settings(
+         settings: &HashMap<String, String>,
+     ) -> Option<Socks5Server> {
+@@ -1535,11 +1536,8 @@ impl Config {
+     }
+ 
+     pub fn get_socks() -> Option<Socks5Server> {
+-        Self::get_socks_from_custom_client_advanced_settings(&OVERWRITE_SETTINGS.read().unwrap())
+-            .or(CONFIG2.read().unwrap().socks.clone())
+-            .or(Self::get_socks_from_custom_client_advanced_settings(
+-                &DEFAULT_SETTINGS.read().unwrap(),
+-            ))
++        // tailnet-only: a proxy would carry traffic past the Tailscale address checks.
++        None
+     }
+ 
+     #[inline]
+diff --git a/src/lib.rs b/src/lib.rs
+index 8bc7f09..68ac075 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -19,6 +19,7 @@ pub mod proxy;
+ pub mod socket_client;
+ pub mod tcp;
+ pub mod udp;
++pub mod tailnet;
+ pub use env_logger;
+ pub use log;
+ pub mod bytes_codec;
+diff --git a/src/socket_client.rs b/src/socket_client.rs
+index d40a0ff..87d9287 100644
+--- a/src/socket_client.rs
++++ b/src/socket_client.rs
+@@ -131,6 +131,9 @@ pub async fn connect_tcp<
+     target: T,
+     ms_timeout: u64,
+ ) -> ResultType<crate::Stream> {
++    if is_ws_endpoint(&check_ws(&target.to_string())) || target.to_string().starts_with("webrtc://") {
++        crate::bail!("tailnet-only: websocket and webrtc endpoints are disabled ({target})");
++    }
+     #[cfg(feature = "webrtc")]
+     if is_webrtc_endpoint(&target.to_string()) {
+         return Ok(Stream::WebRTC(
+@@ -209,14 +212,15 @@ pub fn ipv4_to_ipv6(addr: String, ipv4: bool) -> String {
+ async fn resolve_target(target: &str) -> ResultType<SocketAddr> {
+     tokio::net::lookup_host(target)
+         .await?
+-        .next()
+-        .context(format!("Failed to look up host for {target}"))
++        .find(crate::tailnet::is_allowed_addr)
++        .context(format!("tailnet-only: {target} has no Tailscale address"))
+ }
+ 
+ /// The address of `target` a TCP connection reaches, the resolver's candidates tried in order until
+ /// one answers: an AAAA the server refuses is passed over for its A record, which the order alone
+ /// would not do. For the rendezvous registration and the punch reply, which live on what it picks.
+ async fn test_target(target: &str) -> ResultType<SocketAddr> {
++    let target = &resolve_target(target).await?.to_string();
+     if let Ok(Ok(s)) = super::timeout(1000, tokio::net::TcpStream::connect(target)).await {
+         if let Ok(addr) = s.peer_addr() {
+             return Ok(addr);
+diff --git a/src/tailnet.rs b/src/tailnet.rs
+new file mode 100644
+index 0000000..501d0e4
+--- /dev/null
++++ b/src/tailnet.rs
+@@ -0,0 +1,75 @@
++//! Tailnet-only networking: every peer, server and relay must be reached over Tailscale.
++//!
++//! Allowed: Tailscale CGNAT range `100.64.0.0/10`, Tailscale ULA `fd7a:115c:a1e0::/48`
++//! and loopback (IPC, local tests). Everything else is refused at the socket layer.
++
++use std::net::{IpAddr, SocketAddr};
++
++pub fn is_allowed_ip(ip: IpAddr) -> bool {
++    let ip = match ip {
++        IpAddr::V6(v6) => v6
++            .to_ipv4_mapped()
++            .map(IpAddr::V4)
++            .unwrap_or(IpAddr::V6(v6)),
++        ip => ip,
++    };
++    if ip.is_loopback() {
++        return true;
++    }
++    match ip {
++        IpAddr::V4(v4) => {
++            let o = v4.octets();
++            o[0] == 100 && (o[1] & 0xc0) == 64
++        }
++        IpAddr::V6(v6) => {
++            let s = v6.segments();
++            s[0] == 0xfd7a && s[1] == 0x115c && s[2] == 0xa1e0
++        }
++    }
++}
++
++#[inline]
++pub fn is_allowed_addr(addr: &SocketAddr) -> bool {
++    is_allowed_ip(addr.ip())
++}
++
++pub fn check_addr(addr: &SocketAddr) -> crate::ResultType<()> {
++    if is_allowed_addr(addr) {
++        Ok(())
++    } else {
++        crate::bail!("tailnet-only: {} is not a Tailscale address", addr)
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn allows_only_tailscale_and_loopback() {
++        for ok in [
++            "100.64.0.1",
++            "100.101.1.1",
++            "100.127.255.254",
++            "fd7a:115c:a1e0::1",
++            "127.0.0.1",
++            "::1",
++            "::ffff:100.101.2.2",
++        ] {
++            assert!(is_allowed_ip(ok.parse().unwrap()), "{}", ok);
++        }
++        for bad in [
++            "203.0.113.10",
++            "10.62.179.10",
++            "192.168.0.10",
++            "100.63.255.255",
++            "100.128.0.1",
++            "0.0.0.0",
++            "2001:db8::1",
++            "fd7a:115c:a1e1::1",
++            "::ffff:203.0.113.10",
++        ] {
++            assert!(!is_allowed_ip(bad.parse().unwrap()), "{}", bad);
++        }
++    }
++}
+diff --git a/src/tcp.rs b/src/tcp.rs
+index b457bbe..fcfd51d 100644
+--- a/src/tcp.rs
++++ b/src/tcp.rs
+@@ -122,6 +122,10 @@ impl FramedStream {
+         ms_timeout: u64,
+     ) -> ResultType<Self> {
+         for remote_addr in lookup_host(&remote_addr).await? {
++            if !crate::tailnet::is_allowed_addr(&remote_addr) {
++                log::warn!("tailnet-only: refused to connect to {}", remote_addr);
++                continue;
++            }
+             let local = if let Some(addr) = local_addr {
+                 addr
+             } else {
+diff --git a/src/udp.rs b/src/udp.rs
+index fbdf332..5595b70 100644
+--- a/src/udp.rs
++++ b/src/udp.rs
+@@ -100,6 +100,7 @@ impl FramedSocket {
+         match self {
+             Self::Direct(f) => {
+                 if let TargetAddr::Ip(addr) = addr {
++                    crate::tailnet::check_addr(&addr)?;
+                     f.send((send_data, addr)).await?
+                 }
+             }
+@@ -120,6 +121,7 @@ impl FramedSocket {
+         match self {
+             Self::Direct(f) => {
+                 if let TargetAddr::Ip(addr) = addr {
++                    crate::tailnet::check_addr(&addr)?;
+                     f.send((Bytes::from(msg), addr)).await?
+                 }
+             }
+@@ -131,12 +133,17 @@ impl FramedSocket {
+     #[inline]
+     pub async fn next(&mut self) -> Option<ResultType<(BytesMut, TargetAddr<'static>)>> {
+         match self {
+-            Self::Direct(f) => match f.next().await {
+-                Some(Ok((data, addr))) => {
+-                    Some(Ok((data, addr.into_target_addr().ok()?.to_owned())))
++            Self::Direct(f) => loop {
++                match f.next().await {
++                    Some(Ok((_, addr))) if !crate::tailnet::is_allowed_addr(&addr) => {
++                        log::trace!("tailnet-only: dropped a datagram from {}", addr);
++                    }
++                    Some(Ok((data, addr))) => {
++                        break Some(Ok((data, addr.into_target_addr().ok()?.to_owned())))
++                    }
++                    Some(Err(e)) => break Some(Err(anyhow!(e))),
++                    None => break None,
+                 }
+-                Some(Err(e)) => Some(Err(anyhow!(e))),
+-                None => None,
+             },
+             Self::ProxySocks(f) => match f.next().await {
+                 Some(Ok((data, _))) => Some(Ok((data.data, data.dst_addr))),

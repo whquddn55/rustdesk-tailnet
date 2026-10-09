@@ -1064,7 +1064,8 @@ impl RendezvousMediator {
         // syncs over IPC, so this (server) process would read the private-server default of "N"
         // and refuse to answer in exactly the self-hosted deployments the transport is for.
         // A proxy still rules it out — ICE would bypass it and leak the real IP.
-        let webrtc_viable = !ph.webrtc_sdp_offer.is_empty()
+        let webrtc_viable = !crate::tailnet::ENFORCED
+            && !ph.webrtc_sdp_offer.is_empty()
             && !Config::is_proxy()
             && (!webrtc_relay_only || WebRTCStream::has_turn_server());
         let webrtc_sdp_answer = if webrtc_viable {

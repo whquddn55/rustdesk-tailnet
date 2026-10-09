@@ -335,6 +335,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       // clipboard
       oldValue = '';
     }
+    if (_inputSoftKeyboardReplacement(oldValue, newValue)) {
+      return;
+    }
     // This length-only diff assumes the IME appends at the end. If an IME
     // leaves the caret inside paired punctuation, later insertions can replay
     // the closing symbol: "()" -> "(a)" sends ")" instead of "a". This is a
@@ -368,6 +371,33 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         inputChar(content);
       }
     }
+  }
+
+  // Korean IMEs rewrite the last syllable in place (ㄱ -> 가 -> 각 -> 가가), which the
+  // length-only diff below drops or appends wrongly. Replay such edits as backspaces
+  // plus the new tail. Pure appends and deletions keep the existing path.
+  bool _inputSoftKeyboardReplacement(String oldValue, String newValue) {
+    final oldRunes = oldValue.runes.toList();
+    final newRunes = newValue.runes.toList();
+    var common = 0;
+    while (common < oldRunes.length &&
+        common < newRunes.length &&
+        oldRunes[common] == newRunes[common]) {
+      ++common;
+    }
+    if (common == oldRunes.length || common == newRunes.length) {
+      return false;
+    }
+    for (var i = common; i < oldRunes.length; ++i) {
+      inputModel.inputKey('VK_BACK');
+    }
+    final content = String.fromCharCodes(newRunes.sublist(common));
+    if (content.runes.length > 1) {
+      bind.sessionInputString(sessionId: sessionId, value: content);
+    } else {
+      inputChar(content);
+    }
+    return true;
   }
 
   // handle mobile virtual keyboard

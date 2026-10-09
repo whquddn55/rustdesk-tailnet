@@ -218,6 +218,7 @@ pub async fn create_tcp_connection(
     let mut stream = stream;
     // The address the connection layer keys on, whitelist and admission alike.
     let addr = hbb_common::try_into_v4(addr);
+    crate::tailnet::check_incoming(&addr)?;
     let id = server.write().unwrap().get_new_id();
     // Admitted before the identity handshake, so a peer that stalls in it, or after it without
     // logging in, holds its place the whole time; an address over its share is turned away.

@@ -7139,6 +7139,7 @@ dependencies = [
  "percent-encoding",
  "piet",
  "piet-coregraphics",
+ "plist",
  "portable-pty",
  "qrcode-generator",
  "rdev",

@@ -2489,6 +2489,11 @@ pub fn handle_key_(evt: &KeyEvent) {
         return;
     }
 
+    #[cfg(target_os = "macos")]
+    if crate::platform::macos_ime::handle_ime_toggle(evt) {
+        return;
+    }
+
     #[cfg(target_os = "linux")]
     super::uinput::prepare_layout(evt);
 

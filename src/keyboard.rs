@@ -960,6 +960,10 @@ pub fn event_to_key_events(
     let mut key_event = KeyEvent::new();
     key_event.mode = keyboard_mode.into();
 
+    if let Some(key_events) = ime_toggle_key_events(peer.as_str(), event) {
+        return key_events;
+    }
+
     let mut key_events = match keyboard_mode {
         KeyboardMode::Map => map_keyboard_mode(peer.as_str(), event, key_event),
         KeyboardMode::Translate => translate_keyboard_mode(peer.as_str(), event, key_event),
@@ -1252,6 +1256,87 @@ pub fn map_keyboard_mode(_peer: &str, event: &Event, key_event: KeyEvent) -> Vec
     _map_keyboard_mode(_peer, event, key_event)
         .map(|e| vec![e])
         .unwrap_or_default()
+}
+
+// Each machine toggles the Korean input source with its own key (VK_HANGUL on Windows; on
+// macOS whatever System Settings says: F13, Ctrl+Space, Caps Lock, the globe key ...).
+// Send the toggle itself as a legacy `Hangul` control key: Windows injects VK_HANGUL and
+// a macOS peer switches its input source directly, so the two sides need not agree on a key.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+static IME_TOGGLE_KEY_DOWN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+#[allow(unused_variables)]
+fn ime_toggle_key_events(peer: &str, event: &Event) -> Option<Vec<KeyEvent>> {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        #[cfg(target_os = "macos")]
+        let peer_ok = peer == OS_LOWER_WINDOWS || peer == OS_LOWER_MACOS;
+        // Windows to Windows already passes VK_HANGUL through.
+        #[cfg(target_os = "windows")]
+        let peer_ok = peer == OS_LOWER_MACOS;
+        if !peer_ok {
+            return None;
+        }
+        let code = event.platform_code;
+        #[cfg(target_os = "macos")]
+        if code == crate::platform::macos_ime::KVK_CAPS_LOCK {
+            if !is_local_ime_toggle(code) {
+                return None;
+            }
+            if !crate::platform::macos_ime::caps_lock_toggle_due() {
+                return Some(vec![]);
+            }
+            return Some(vec![hangul_key_event(true), hangul_key_event(false)]);
+        }
+        let down = match event.event_type {
+            EventType::KeyPress(..) => {
+                if IME_TOGGLE_KEY_DOWN.load(Ordering::SeqCst) == code && code != 0 {
+                    // Auto-repeat: one toggle per physical press.
+                    return Some(vec![]);
+                }
+                if !is_local_ime_toggle(code) {
+                    return None;
+                }
+                IME_TOGGLE_KEY_DOWN.store(code, Ordering::SeqCst);
+                true
+            }
+            EventType::KeyRelease(..) => {
+                if code == 0
+                    || IME_TOGGLE_KEY_DOWN
+                        .compare_exchange(code, 0, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                {
+                    return None;
+                }
+                false
+            }
+            _ => return None,
+        };
+        return Some(vec![hangul_key_event(down)]);
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    None
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn hangul_key_event(down: bool) -> KeyEvent {
+    let mut key_event = KeyEvent::new();
+    key_event.mode = KeyboardMode::Legacy.into();
+    key_event.down = down;
+    key_event.set_control_key(ControlKey::Hangul);
+    key_event
+}
+
+#[cfg(target_os = "windows")]
+fn is_local_ime_toggle(code: u32) -> bool {
+    const VK_HANGUL: u32 = 0x15;
+    code == VK_HANGUL
+}
+
+#[cfg(target_os = "macos")]
+fn is_local_ime_toggle(code: u32) -> bool {
+    let (alt, ctrl, shift, command) = client::get_modifiers_state(false, false, false, false);
+    crate::platform::macos_ime::is_input_source_shortcut(code, alt, ctrl, shift, command)
 }
 
 fn windows_peer_special_key(peer: &str, event: &Event) -> Option<KeyEvent> {

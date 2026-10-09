@@ -121,6 +121,7 @@ impl Drop for SimpleCallOnReturn {
 }
 
 pub fn global_init() -> bool {
+    crate::tailnet::init();
     #[cfg(all(target_os = "linux", feature = "drm"))]
     crate::platform::linux::dispatch_wayland_display_probe();
     #[cfg(target_os = "linux")]
@@ -1176,6 +1177,9 @@ pub fn get_tcp_punch_enabled() -> bool {
 }
 
 pub fn get_udp_punch_enabled() -> bool {
+    if crate::tailnet::ENFORCED {
+        return false;
+    }
     config::option2bool(
         keys::OPTION_ENABLE_UDP_PUNCH,
         &get_local_option(keys::OPTION_ENABLE_UDP_PUNCH),
@@ -1183,6 +1187,9 @@ pub fn get_udp_punch_enabled() -> bool {
 }
 
 pub fn get_ipv6_punch_enabled() -> bool {
+    if crate::tailnet::ENFORCED {
+        return false;
+    }
     config::option2bool(
         keys::OPTION_ENABLE_IPV6_PUNCH,
         &get_local_option(keys::OPTION_ENABLE_IPV6_PUNCH),
@@ -1190,6 +1197,9 @@ pub fn get_ipv6_punch_enabled() -> bool {
 }
 
 pub fn get_webrtc_enabled() -> bool {
+    if crate::tailnet::ENFORCED {
+        return false;
+    }
     config::option2bool(
         keys::OPTION_ENABLE_WEBRTC,
         &get_local_option(keys::OPTION_ENABLE_WEBRTC),
@@ -2351,6 +2361,7 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
 }
 
 pub fn load_custom_client() {
+    crate::tailnet::init();
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());
