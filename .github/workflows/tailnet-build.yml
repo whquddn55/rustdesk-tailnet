@@ -49,6 +49,9 @@ env:
   VCPKG_CMAKE_VERSION: "4.3.0"
   ARMV7_VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836" # 2025.01.13, got "/opt/artifacts/vcpkg/vcpkg: No such file or directory" with latest version
   VERSION: "1.5.0"
+  # Default API server baked into the build (repository variable). Everything else
+  # (ID server, relay, key) comes from the account after login.
+  TAILNET_API_SERVER: "${{ vars.TAILNET_API_SERVER }}"
   NDK_VERSION: "r28c"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"

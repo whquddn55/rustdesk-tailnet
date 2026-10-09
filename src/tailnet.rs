@@ -6,7 +6,9 @@
 
 use base::config::keys;
 use hbb_common::{
-    config::{DEFAULT_DISPLAY_SETTINGS, OVERWRITE_LOCAL_SETTINGS, OVERWRITE_SETTINGS},
+    config::{
+        DEFAULT_DISPLAY_SETTINGS, DEFAULT_SETTINGS, OVERWRITE_LOCAL_SETTINGS, OVERWRITE_SETTINGS,
+    },
     log, tailnet,
 };
 use std::net::{IpAddr, SocketAddr};
@@ -14,6 +16,15 @@ use std::net::{IpAddr, SocketAddr};
 pub const ENFORCED: bool = true;
 
 pub fn init() {
+    // Only the API server is known up front; after login it pushes the ID server, relay
+    // and key of the account (heartbeat "strategy", hbbs_http/sync.rs).
+    if let Some(api_server) = option_env!("TAILNET_API_SERVER").filter(|s| !s.is_empty()) {
+        if let Ok(mut settings) = DEFAULT_SETTINGS.write() {
+            settings
+                .entry(keys::OPTION_API_SERVER.to_owned())
+                .or_insert_with(|| api_server.to_owned());
+        }
+    }
     if let Ok(mut settings) = OVERWRITE_SETTINGS.write() {
         settings.insert(keys::OPTION_DIRECT_SERVER.to_owned(), "Y".to_owned());
         settings.insert(keys::OPTION_ENABLE_LAN_DISCOVERY.to_owned(), "N".to_owned());

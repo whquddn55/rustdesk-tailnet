@@ -11,6 +11,7 @@ RustDesk 를 Tailscale 전용으로 고친 포크다. 업스트림 `rustdesk/rus
 | 한/영 전환 | `src/keyboard.rs` `ime_toggle_key_events`, `src/platform/macos_ime.rs` | 키를 키로 바꾸지 않고 "입력 소스 전환" 동작을 보낸다 (아래 표). 수동 설정은 없다. |
 | 폰 한글 | `flutter/lib/mobile/pages/remote_page.dart` `_inputSoftKeyboardReplacement` | Android 키보드가 마지막 글자를 바꿔 쓰는 조합(ㄱ→가→각→가가)을 백스페이스 + 새 글자로 보낸다. 전에는 글자 수만 비교해 "안녕" 이 "ㅇㄴ" 으로 들어갔다. |
 | 코덱 기본값 | `src/tailnet.rs` | 새로 붙는 기기의 코덱 기본값을 H.264 로 둔다 (사용자가 바꾸면 그 값을 쓴다). |
+| API 서버 기본값 | `src/tailnet.rs`, `tailnet-build.yml` | 빌드 때 `TAILNET_API_SERVER` 를 API 서버 기본값으로 넣는다. 나머지 서버 설정은 계정에서 받는다. |
 | CI | `.github/workflows/flutter-build.yml` | checkout 뒤마다 `tailnet/apply-patches.sh` 로 `hbb_common` 패치를 적용한다. |
 
 `hbb_common` 은 서버와 같이 쓰는 git submodule 이다. submodule 커밋은 건드리지 않고 패치 파일로 들고 다닌다.
@@ -38,22 +39,17 @@ bash tailnet/make-patch.sh      # libs/hbb_common 을 고친 뒤 패치 파일 �
 
 ## 기기 설정
 
-서버 PC 의 Tailscale IP 를 `100.A.B.C` 라고 하면, 모든 기기에서 **네트워크 → ID/릴레이 서버** 에 이렇게 넣는다.
+설치하고 로그인만 한다.
 
-| 칸 | 값 |
-|---|---|
-| ID 서버 | `100.A.B.C` |
-| 릴레이 서버 | `100.A.B.C` |
-| API 서버 | `http://100.A.B.C:21114` |
-| Key | 서버 PC 의 hbbs 공개키 (`id_ed25519.pub` 내용) |
-
-- 공인 도메인(`rust.example.com` 처럼 공인 IP 로 풀리는 이름)을 넣으면 이 포크는 연결을 거부한다. 로그에 `tailnet-only:` 로 시작하는 줄이 남는다.
-- 상대 기기의 Tailscale IP(`100.x.y.z`)를 ID 칸에 넣으면 ID 서버 없이 직접 IP 접속으로 붙는다.
+- API 서버 주소는 빌드 기본값이다. GitHub 저장소 변수 `TAILNET_API_SERVER` (지금 `http://rustdesk-server.example.ts.net:21114`) 가 빌드에 들어간다. 설정 → 네트워크의 API 서버 칸에서 바꿀 수 있다.
+- 로그인하면 API 서버가 heartbeat 응답(`strategy`)으로 ID 서버 · 릴레이 · Key 를 내려 주고, 클라이언트가 저장한다. 같은 계정의 기기는 모두 같은 값을 쓴다. 서버를 옮기면 API 서버 쪽 설정만 바꾼다.
+- 접속할 때는 상대 기기의 비밀번호를 넣는다 (기억하기를 켜면 다음부터 생략).
+- 공인 도메인(`rust.example.com` 처럼 공인 IP 로 풀리는 이름)이 남아 있으면 이 포크는 연결을 거부하고 로그에 `tailnet-only:` 줄을 남긴다. 로그인 뒤 계정 설정이 내려오면 덮어써진다.
 - 공유기의 RustDesk 포트 포워딩(21114~21119)은 닫는다.
 
 ## 빌드
 
-로컬 빌드는 vcpkg · Flutter 가 필요해서 GitHub Actions 로 빌드한다. 이 저장소를 GitHub 에 올리고 `flutter-nightly` 나 `flutter-build` 워크플로를 돌리면 윈도우 · 맥 · Android 산출물이 나온다. 서명하지 않은 빌드라 맥은 Gatekeeper, 윈도우는 SmartScreen 경고가 뜬다. iOS 는 Apple 개발자 계정이 있어야 설치할 수 있다.
+로컬 빌드는 vcpkg · Flutter 가 필요해서 GitHub Actions 로 빌드한다. `tailnet-build` 워크플로(수동 실행)가 Windows x64 · macOS arm64 · Android arm64 를 만들어 Release `tailnet-latest` 와 Actions 산출물로 올린다. 원본의 다른 워크플로는 저장소에서 꺼 두었다. 서명하지 않은 빌드라 맥은 Gatekeeper, 윈도우는 SmartScreen 경고가 뜬다. iOS 는 Apple 개발자 계정이 있어야 설치할 수 있다.
 
 ## 검증한 것
 
