@@ -76,6 +76,8 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let _ = crate::common::global_init();
+        #[cfg(target_os = "android")]
+        crate::tailnet::sync_account_settings();
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -1254,7 +1256,13 @@ pub fn main_set_env(key: String, value: Option<String>) -> SyncReturn<()> {
 pub fn main_set_local_option(key: String, value: String) {
     let is_texture_render_key = key.eq(keys::OPTION_TEXTURE_RENDER);
     let is_d3d_render_key = key.eq(keys::OPTION_ALLOW_D3D_RENDER);
+    #[cfg(target_os = "android")]
+    let is_login = key == "access_token" && !value.is_empty();
     set_local_option(key, value.clone());
+    #[cfg(target_os = "android")]
+    if is_login {
+        crate::tailnet::sync_account_settings();
+    }
     let is_render_target =
         |session: &crate::flutter::FlutterSession| session.is_default() || session.is_view_camera();
     if is_texture_render_key {

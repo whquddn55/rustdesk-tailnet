@@ -91,3 +91,52 @@ pub fn http_block_proxy() -> reqwest::Proxy {
         Some("http://127.0.0.1:9")
     })
 }
+
+/// The heartbeat that brings the account's ID server, relay and key runs inside the
+/// controlled-side service, which a phone used only as a controller never starts.
+/// Fetch them once right away: after login and when the app starts logged in.
+#[cfg(target_os = "android")]
+pub fn sync_account_settings() {
+    std::thread::spawn(|| {
+        if let Err(e) = mobile::fetch_account_settings() {
+            log::warn!("failed to fetch account settings: {}", e);
+        }
+    });
+}
+
+#[cfg(target_os = "android")]
+mod mobile {
+    use crate::hbbs_http::sync::{handle_config_options, StrategyOptions};
+    use hbb_common::{
+        config::{Config, LocalConfig},
+        log, tokio, ResultType,
+    };
+
+    #[tokio::main(flavor = "current_thread")]
+    pub(super) async fn fetch_account_settings() -> ResultType<()> {
+        if LocalConfig::get_option("access_token").is_empty() {
+            return Ok(());
+        }
+        let api = crate::common::get_api_server(
+            Config::get_option("api-server"),
+            Config::get_option("custom-rendezvous-server"),
+        );
+        if api.is_empty() {
+            return Ok(());
+        }
+        let body = serde_json::json!({
+            "id": Config::get_id(),
+            "uuid": crate::encode64(hbb_common::get_uuid()),
+            "modified_at": 0,
+        });
+        let resp =
+            crate::post_request(format!("{api}/api/heartbeat"), body.to_string(), "").await?;
+        let resp: serde_json::Value = serde_json::from_str(&resp)?;
+        if let Some(strategy) = resp.get("strategy") {
+            let strategy: StrategyOptions = serde_json::from_value(strategy.clone())?;
+            handle_config_options(strategy.config_options);
+            log::info!("account settings applied");
+        }
+        Ok(())
+    }
+}
