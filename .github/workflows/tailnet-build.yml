@@ -608,6 +608,10 @@ jobs:
           CREATE_DMG="$(command -v create-dmg)"
           CREATE_DMG="$(readlink -f "$CREATE_DMG")"
           sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
+          # Without a Developer ID the build leaves a broken ad-hoc seal, which Gatekeeper
+          # reports as "damaged". Re-seal ad-hoc so right-click > Open works.
+          codesign --force --deep --sign - ./flutter/build/macos/Build/Products/Release/RustDesk.app
+          codesign --verify --deep --strict ./flutter/build/macos/Build/Products/Release/RustDesk.app
           create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk.app
 
       - name: Upload unsigned macOS app
