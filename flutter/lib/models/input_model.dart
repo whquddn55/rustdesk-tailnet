@@ -1040,6 +1040,22 @@ class InputModel {
         command: command);
   }
 
+  /// Like [inputKey], but completes once the key went through, so callers can
+  /// keep a sequence of keys in order.
+  Future<void> inputKeyAsync(String name) async {
+    if (!keyboardPerm) return;
+    if (isViewCamera) return;
+    await bind.sessionInputKey(
+        sessionId: sessionId,
+        name: name,
+        down: false,
+        press: true,
+        alt: alt,
+        ctrl: ctrl,
+        shift: shift,
+        command: command);
+  }
+
   static Map<String, dynamic> getMouseEventMove() => {
         'type': _kMouseEventMove,
         'buttons': 0,

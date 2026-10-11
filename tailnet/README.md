@@ -9,7 +9,7 @@ RustDesk 를 Tailscale 전용으로 고친 포크다. 업스트림 `rustdesk/rus
 | Tailscale 강제 (소켓) | `tailnet/hbb_common.patch` → `libs/hbb_common` | TCP 연결 · UDP 송수신 · 서버 주소 해석에서 `100.64.0.0/10` · `fd7a:115c:a1e0::/48` · loopback 밖 주소를 거부한다. websocket · webrtc 엔드포인트와 프록시(SOCKS/HTTP)를 막는다. |
 | Tailscale 강제 (앱) | `src/tailnet.rs` + 얇은 훅 | UDP punch · IPv6 punch · KCP · WebRTC(보내는 쪽 · 받는 쪽) · LAN 탐색을 끄고, 직접 IP 접속(21118)을 켠다. 들어오는 연결도 Tailscale 주소만 받는다 (`src/server.rs`). HTTP(API 서버 · 업데이트 확인)는 Tailscale 주소로 풀리는 이름과 Tailscale IP 만 간다. |
 | 한/영 전환 | `src/keyboard.rs` `ime_toggle_key_events`, `src/platform/macos_ime.rs` | 키를 키로 바꾸지 않고 "입력 소스 전환" 동작을 보낸다 (아래 표). 수동 설정은 없다. |
-| 폰 한글 | `flutter/lib/mobile/pages/remote_page.dart` `_inputSoftKeyboardReplacement` | Android 키보드가 마지막 글자를 바꿔 쓰는 조합(ㄱ→가→각→가가)을 백스페이스 + 새 글자로 보낸다. 전에는 글자 수만 비교해 "안녕" 이 "ㅇㄴ" 으로 들어갔다. |
+| 폰 한글 | `flutter/lib/mobile/pages/remote_page.dart` `_handleNonIOSSoftKeyboardInput`, `_queueSoftKeyboardInput` | Android 키보드가 마지막 글자를 바꿔 쓰는 조합(ㄱ→가→각→가가)을 공통 앞부분 비교로 백스페이스 + 새 글자로 보내고, 입력 호출을 하나씩 차례로 끝낸다. 전에는 글자 수만 비교해 "안녕" 이 "ㅇㄴ" 으로 들어갔고, 빨리 치면 호출 순서가 뒤바뀌어 "아녕" 이 됐다. |
 | 코덱 기본값 | `src/tailnet.rs` | 새로 붙는 기기의 코덱 기본값을 H.264 로 둔다 (사용자가 바꾸면 그 값을 쓴다). |
 | API 서버 기본값 | `src/tailnet.rs`, `tailnet-build.yml` | 빌드 때 `TAILNET_API_SERVER` 를 API 서버 기본값으로 넣는다. 나머지 서버 설정은 계정에서 받는다. |
 | CI | `.github/workflows/flutter-build.yml` | checkout 뒤마다 `tailnet/apply-patches.sh` 로 `hbb_common` 패치를 적용한다. |

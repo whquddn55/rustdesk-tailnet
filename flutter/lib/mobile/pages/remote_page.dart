@@ -335,48 +335,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       // clipboard
       oldValue = '';
     }
-    if (_inputSoftKeyboardReplacement(oldValue, newValue)) {
-      return;
-    }
-    // This length-only diff assumes the IME appends at the end. If an IME
-    // leaves the caret inside paired punctuation, later insertions can replay
-    // the closing symbol: "()" -> "(a)" sends ")" instead of "a". This is a
-    // client text-diff issue, independent of the host keyboard layout.
-    if (newValue.length == oldValue.length) {
-      // ?
-    } else if (newValue.length < oldValue.length) {
-      final char = 'VK_BACK';
-      inputModel.inputKey(char);
-    } else {
-      final content = newValue.substring(oldValue.length);
-      if (content.length > 1) {
-        if (oldValue != '' &&
-            content.length == 2 &&
-            (content == '""' ||
-                content == '()' ||
-                content == '[]' ||
-                content == '<>' ||
-                content == "{}" ||
-                content == '”“' ||
-                content == '《》' ||
-                content == '（）' ||
-                content == '【】')) {
-          // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
-          bind.sessionInputString(sessionId: sessionId, value: content);
-          _openKeyboardUnlocked();
-          return;
-        }
-        bind.sessionInputString(sessionId: sessionId, value: content);
-      } else {
-        inputChar(content);
-      }
-    }
-  }
-
-  // Korean IMEs rewrite the last syllable in place (ㄱ -> 가 -> 각 -> 가가), which the
-  // length-only diff below drops or appends wrongly. Replay such edits as backspaces
-  // plus the new tail. Pure appends and deletions keep the existing path.
-  bool _inputSoftKeyboardReplacement(String oldValue, String newValue) {
+    // Diff by common prefix, not length: Korean IMEs rewrite the last syllable
+    // in place (ㄱ -> 가 -> 각 -> 가가), and an IME may insert inside paired
+    // punctuation ("()" -> "(a)").
     final oldRunes = oldValue.runes.toList();
     final newRunes = newValue.runes.toList();
     var common = 0;
@@ -385,19 +346,42 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         oldRunes[common] == newRunes[common]) {
       ++common;
     }
-    if (common == oldRunes.length || common == newRunes.length) {
-      return false;
-    }
-    for (var i = common; i < oldRunes.length; ++i) {
-      inputModel.inputKey('VK_BACK');
-    }
+    final backspaces = oldRunes.length - common;
     final content = String.fromCharCodes(newRunes.sublist(common));
-    if (content.runes.length > 1) {
-      bind.sessionInputString(sessionId: sessionId, value: content);
-    } else {
-      inputChar(content);
+    if (backspaces == 0 && content.isEmpty) {
+      return;
     }
-    return true;
+    _queueSoftKeyboardInput(backspaces, content);
+    if (oldValue != '' &&
+        const ['""', '()', '[]', '<>', '{}', '”“', '《》', '（）', '【】']
+            .contains(content)) {
+      // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
+      _openKeyboardUnlocked();
+    }
+  }
+
+  // The FFI calls are not ordered among themselves, so when typing fast a
+  // backspace could overtake the syllable typed before it ("안녕" -> "아녕").
+  // Run each edit only after the previous one went through.
+  Future<void> _softKeyboardInput = Future.value();
+
+  void _queueSoftKeyboardInput(int backspaces, String content) {
+    _softKeyboardInput = _softKeyboardInput.then((_) async {
+      for (var i = 0; i < backspaces; ++i) {
+        await inputModel.inputKeyAsync('VK_BACK');
+      }
+      if (content.runes.length > 1) {
+        await bind.sessionInputString(sessionId: sessionId, value: content);
+      } else if (content == '\n') {
+        await inputModel.inputKeyAsync('VK_RETURN');
+      } else if (content == ' ') {
+        await inputModel.inputKeyAsync('VK_SPACE');
+      } else if (content.isNotEmpty) {
+        await inputModel.inputKeyAsync(content);
+      }
+    }).catchError((e) {
+      debugPrint('soft keyboard input failed: $e');
+    });
   }
 
   // handle mobile virtual keyboard
