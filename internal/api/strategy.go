@@ -1,10 +1,13 @@
 package api
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/binary"
+	"net"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -18,6 +21,16 @@ type ServerSettings struct {
 	// KeyFile is hbbs' public key (id_ed25519.pub); read on each heartbeat so
 	// a regenerated key reaches the devices without a restart.
 	KeyFile string
+	// Ports as seen by the devices; zero means the RustDesk default. Non-default
+	// ports let a test instance run beside an existing server on the same host.
+	APIPort, IDPort, RelayPort int
+}
+
+func hostPort(host string, port, def int) string {
+	if port == 0 || port == def {
+		return host
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
 func (c ServerSettings) options() map[string]string {
@@ -25,9 +38,9 @@ func (c ServerSettings) options() map[string]string {
 		return nil
 	}
 	opts := map[string]string{
-		"custom-rendezvous-server": c.Host,
-		"relay-server":             c.Host,
-		"api-server":               "http://" + c.Host + ":21114",
+		"custom-rendezvous-server": hostPort(c.Host, c.IDPort, 21116),
+		"relay-server":             hostPort(c.Host, c.RelayPort, 21117),
+		"api-server":               "http://" + net.JoinHostPort(c.Host, strconv.Itoa(cmp.Or(c.APIPort, 21114))),
 	}
 	if c.KeyFile != "" {
 		if b, err := os.ReadFile(c.KeyFile); err == nil {

@@ -17,12 +17,14 @@ services:
     image: rustdesk-tailnet-api:local
     network_mode: host
     environment:
-      LISTEN_ADDR: "${TS_IP:?TS_IP 를 .env 에 설정하세요}:21114"
+      LISTEN_ADDR: "${TS_IP:?TS_IP 를 .env 에 설정하세요}:${API_PORT:-21114}"
       DB_PATH: /data/api.db
       TOKEN_TTL: "${TOKEN_TTL:-720h}"
       # Pushed to every logged-in device as its ID / relay / API server and Key.
       SERVER_HOST: "${SERVER_HOST:-${TS_IP}}"
       HBBS_KEY_FILE: /rustdesk/id_ed25519.pub
+      HBBS_PORT: "${HBBS_PORT:-21116}"
+      HBBR_PORT: "${HBBR_PORT:-21117}"
     volumes:
       - api-data:/data
       - ./data/rustdesk:/rustdesk:ro
@@ -33,11 +35,11 @@ services:
   #  21118(웹 클라이언트용 websocket)은 쓰지 않으므로 열지 않는다.
   hbbs:
     image: "rustdesk/rustdesk-server:${RUSTDESK_SERVER_TAG:-1.1.16}"
-    command: ["hbbs", "-r", "${TS_IP:?TS_IP 를 .env 에 설정하세요}:21117"]
+    command: ["hbbs", "-r", "${TS_IP:?TS_IP 를 .env 에 설정하세요}:${HBBR_PORT:-21117}"]
     ports:
-      - "${TS_IP:?}:21115:21115/tcp"
-      - "${TS_IP:?}:21116:21116/tcp"
-      - "${TS_IP:?}:21116:21116/udp"
+      - "${TS_IP:?}:${HBBS_NAT_PORT:-21115}:21115/tcp"
+      - "${TS_IP:?}:${HBBS_PORT:-21116}:21116/tcp"
+      - "${TS_IP:?}:${HBBS_PORT:-21116}:21116/udp"
     volumes:
       - ./data/rustdesk:/root   # id_ed25519 / id_ed25519.pub (클라이언트 Key) 가 여기에 생긴다
     depends_on:
@@ -49,7 +51,7 @@ services:
     image: "rustdesk/rustdesk-server:${RUSTDESK_SERVER_TAG:-1.1.16}"
     command: ["hbbr"]
     ports:
-      - "${TS_IP:?}:21117:21117/tcp"
+      - "${TS_IP:?}:${HBBR_PORT:-21117}:21117/tcp"
     volumes:
       - ./data/rustdesk:/root
     restart: unless-stopped

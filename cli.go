@@ -51,6 +51,8 @@ Environment:
   ALLOW_LOOPBACK  "1" to also accept 127.0.0.1/::1 — local testing only, default off
   SERVER_HOST     ID/relay/API host pushed to logged-in devices (default: LISTEN_ADDR host)
   HBBS_KEY_FILE   hbbs public key file pushed as the client Key, e.g. /rustdesk/id_ed25519.pub
+  HBBS_PORT       hbbs ID port the devices use (default 21116; NAT test port is one below)
+  HBBR_PORT       hbbr relay port the devices use (default 21117)
 `
 
 func dbPath() string {
@@ -133,7 +135,14 @@ func serverSettings(listen string) api.ServerSettings {
 	if host == "" {
 		host, _, _ = net.SplitHostPort(listen)
 	}
-	return api.ServerSettings{Host: host, KeyFile: os.Getenv("HBBS_KEY_FILE")}
+	_, listenPort, _ := net.SplitHostPort(listen)
+	apiPort, _ := strconv.Atoi(listenPort)
+	idPort, _ := strconv.Atoi(os.Getenv("HBBS_PORT"))
+	relayPort, _ := strconv.Atoi(os.Getenv("HBBR_PORT"))
+	return api.ServerSettings{
+		Host: host, KeyFile: os.Getenv("HBBS_KEY_FILE"),
+		APIPort: apiPort, IDPort: idPort, RelayPort: relayPort,
+	}
 }
 
 func serve(args []string) error {
