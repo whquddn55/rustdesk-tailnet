@@ -2144,6 +2144,11 @@ pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
 }
 
 async fn secure_tcp_impl(conn: &mut Stream, key: &str, log_on_success: bool) -> ResultType<()> {
+    // The open-source hbbs never starts a key exchange, so a logged-in client would wait
+    // READ_TIMEOUT and fail. Tailscale already encrypts the hop to our own server.
+    if crate::tailnet::ENFORCED {
+        return Ok(());
+    }
     // Skip additional encryption when using WebSocket connections (wss://)
     // as WebSocket Secure (wss://) already provides transport layer encryption.
     // This doesn't affect the end-to-end encryption between clients,
