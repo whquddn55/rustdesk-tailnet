@@ -47,16 +47,25 @@ RustDesk 공식 클라이언트가 그대로 붙는 **자체 API 서버**(Go). T
 로그인한 기기는 heartbeat 응답(`strategy`)으로 ID 서버 · 릴레이 · API 서버(`SERVER_HOST`)와 Key(`data/rustdesk/id_ed25519.pub`)를 받아 저장한다.
 기기마다 서버 칸을 채울 필요가 없고, 키를 바꾸면 다음 heartbeat 때 모든 기기에 퍼진다. `data/rustdesk/id_ed25519` 개인 키는 백업하되 외부로 내보내지 말 것.
 
-### 열리는 포트 (모두 `${TS_IP}` 에만)
+### 열리는 포트와 방화벽
 
-| 포트 | 서비스 | 용도 |
-|---|---|---|
-| 21114/tcp | api | 이 API 서버 |
-| 21115/tcp | hbbs | NAT 유형 검사 |
-| 21116/tcp, 21116/udp | hbbs | ID 등록 · 홀펀칭 |
-| 21117/tcp | hbbr | 릴레이 |
+| 포트 (기본) | 서비스 | 용도 | 어디에 열리나 |
+|---|---|---|---|
+| 21114/tcp | api | 이 API 서버 | `${TS_IP}` 에만 |
+| 21115/tcp | hbbs | NAT 유형 검사 | 모든 인터페이스 → `firewall.sh` 로 `tailscale0` 만 |
+| 21116/tcp, 21116/udp | hbbs | ID 등록 · 홀펀칭 | 위와 같음 |
+| 21117/tcp | hbbr | 릴레이 | 위와 같음 |
+| 21118/tcp, 21119/tcp | hbbs · hbbr websocket | 쓰지 않음 | 위와 같음 |
 
-21118/21119(웹 클라이언트용 websocket)는 쓰지 않으므로 열지 않는다. hbbs 는 `-r ${TS_IP}:21117` 로 릴레이 주소도 Tailscale 주소를 알려 준다.
+hbbs/hbbr 는 호스트 네트워크로 띄운다. Docker 포트 publish 를 쓰면 `docker-proxy` 가 접속 주소를 브리지 게이트웨이(예: `192.168.32.1`)로 바꿔,
+hbbs 가 기기에 접속 요청을 전달하지 못한다 (폰에서 `failed to secure tcp: deadline has elapsed`). hbbs 는 주소 하나에만 bind 하는 옵션이 없으므로
+`deploy/firewall.sh` 로 이 포트들을 `tailscale0` · loopback 밖에서는 버린다. compose 를 띄운 뒤, 그리고 부팅 때마다 root 로 실행한다:
+
+```sh
+sudo sh deploy/firewall.sh
+# 부팅 때 자동으로: root crontab 에 한 줄
+# @reboot sleep 30 && sh /경로/rustdesk-tailnet-api/deploy/firewall.sh
+```
 
 ### 부팅 순서 주의
 

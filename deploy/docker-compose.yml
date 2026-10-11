@@ -35,23 +35,23 @@ services:
   #  21118(웹 클라이언트용 websocket)은 쓰지 않으므로 열지 않는다.
   hbbs:
     image: "rustdesk/rustdesk-server:${RUSTDESK_SERVER_TAG:-1.1.16}"
-    command: ["hbbs", "-r", "${TS_IP:?TS_IP 를 .env 에 설정하세요}:${HBBR_PORT:-21117}"]
-    ports:
-      - "${TS_IP:?}:${HBBS_NAT_PORT:-21115}:21115/tcp"
-      - "${TS_IP:?}:${HBBS_PORT:-21116}:21116/tcp"
-      - "${TS_IP:?}:${HBBS_PORT:-21116}:21116/udp"
+    # Host networking: behind docker-proxy hbbs sees every device as the bridge gateway
+    # and can no longer reach them for punch / relay requests. hbbs cannot bind one
+    # address, so firewall.sh limits its ports to tailscale0.
+    # Ports: HBBS_PORT-1 (NAT test), HBBS_PORT tcp+udp, HBBS_PORT+2 (websocket, unused).
+    network_mode: host
+    command: ["hbbs", "-p", "${HBBS_PORT:-21116}", "-r", "${TS_IP:?TS_IP 를 .env 에 설정하세요}:${HBBR_PORT:-21117}"]
     volumes:
       - ./data/rustdesk:/root   # id_ed25519 / id_ed25519.pub (클라이언트 Key) 가 여기에 생긴다
     depends_on:
       - hbbr
     restart: unless-stopped
 
-  # 릴레이 서버. 21117/tcp 만 사용 (21119 websocket 은 열지 않음). hbbs 와 같은 키를 쓴다.
+  # 릴레이 서버. HBBR_PORT tcp (HBBR_PORT+2 websocket 은 쓰지 않음). hbbs 와 같은 키를 쓴다.
   hbbr:
     image: "rustdesk/rustdesk-server:${RUSTDESK_SERVER_TAG:-1.1.16}"
-    command: ["hbbr"]
-    ports:
-      - "${TS_IP:?}:${HBBR_PORT:-21117}:21117/tcp"
+    network_mode: host
+    command: ["hbbr", "-p", "${HBBR_PORT:-21117}"]
     volumes:
       - ./data/rustdesk:/root
     restart: unless-stopped
