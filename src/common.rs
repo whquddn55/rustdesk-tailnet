@@ -2655,6 +2655,10 @@ async fn test_bind_ipv6() -> ResultType<SocketAddr> {
 }
 
 pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
+    // Probes public STUN servers; IPv6 punch is off on the tailnet anyway.
+    if crate::tailnet::ENFORCED {
+        return None;
+    }
     {
         // One look and one claim of the minute, under one lock: two connections arriving
         // together would otherwise both find it over and both probe.
