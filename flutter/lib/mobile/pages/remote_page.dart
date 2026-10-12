@@ -340,7 +340,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     final (oldTyped, newTyped, intoSentinel) =
         _splitSentinel(oldValue, newValue);
     final peer = gFFI.ffiModel.pi.platform;
-    if (peer == kPeerPlatformMacOS || peer == kPeerPlatformWindows) {
+    if (peer == kPeerPlatformMacOS ||
+        peer == kPeerPlatformWindows ||
+        peer == kPeerPlatformLinux) {
       if (intoSentinel) {
         _queueImeKeys(_hangulKeys.edit(oldTyped, '') +
             backspace +
@@ -407,8 +409,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     }
   }
 
-  // Windows and macOS peers compose Hangul with their own IME from 2-set key
-  // presses (see hangul_keys.dart), so nothing flickers while a syllable grows.
+  // Windows, macOS and Linux (IBus) peers compose Hangul with their own IME
+  // from 2-set key presses (see hangul_keys.dart), so nothing flickers while a
+  // syllable grows.
   final _hangulKeys = HangulKeys();
 
   void _queueImeKeys(String keys) {

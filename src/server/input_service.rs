@@ -2494,6 +2494,20 @@ pub fn handle_key_(evt: &KeyEvent) {
         return;
     }
 
+    #[cfg(target_os = "linux")]
+    if let Some(korean) = crate::tailnet::ime_mode_request(evt) {
+        match crate::platform::linux_ime::select_korean(korean) {
+            Ok(true) => {
+                let mut en = ENIGO.lock().unwrap();
+                en.key_down(Key::Hangul).ok();
+                en.key_up(Key::Hangul);
+            }
+            Ok(false) => {}
+            Err(e) => log::warn!("failed to select input source: {}", e),
+        }
+        return;
+    }
+
     #[cfg(target_os = "windows")]
     if let Some(korean) = crate::tailnet::ime_mode_request(evt) {
         if crate::platform::windows_ime::is_korean_mode() == Some(!korean) {

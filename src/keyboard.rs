@@ -1258,22 +1258,26 @@ pub fn map_keyboard_mode(_peer: &str, event: &Event, key_event: KeyEvent) -> Vec
         .unwrap_or_default()
 }
 
-// Each machine toggles the Korean input source with its own key (VK_HANGUL on Windows; on
-// macOS whatever System Settings says: F13, Ctrl+Space, Caps Lock, the globe key ...).
+// Each machine toggles the Korean input source with its own key (VK_HANGUL on Windows,
+// the Hangul key on Linux; on macOS whatever System Settings says: F13, Ctrl+Space,
+// Caps Lock, the globe key ...).
 // Send the toggle itself as a legacy `Hangul` control key: Windows injects VK_HANGUL and
 // a macOS peer switches its input source directly, so the two sides need not agree on a key.
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 static IME_TOGGLE_KEY_DOWN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 #[allow(unused_variables)]
 fn ime_toggle_key_events(peer: &str, event: &Event) -> Option<Vec<KeyEvent>> {
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
         #[cfg(target_os = "macos")]
-        let peer_ok = peer == OS_LOWER_WINDOWS || peer == OS_LOWER_MACOS;
-        // Windows to Windows already passes VK_HANGUL through.
+        let peer_ok =
+            peer == OS_LOWER_WINDOWS || peer == OS_LOWER_MACOS || peer == OS_LOWER_LINUX;
+        // The same OS on both sides already passes its own toggle key through.
         #[cfg(target_os = "windows")]
-        let peer_ok = peer == OS_LOWER_MACOS;
+        let peer_ok = peer == OS_LOWER_MACOS || peer == OS_LOWER_LINUX;
+        #[cfg(target_os = "linux")]
+        let peer_ok = peer == OS_LOWER_MACOS || peer == OS_LOWER_WINDOWS;
         if !peer_ok {
             return None;
         }
@@ -1314,11 +1318,11 @@ fn ime_toggle_key_events(peer: &str, event: &Event) -> Option<Vec<KeyEvent>> {
         };
         return Some(vec![hangul_key_event(down)]);
     }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     None
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 fn hangul_key_event(down: bool) -> KeyEvent {
     let mut key_event = KeyEvent::new();
     key_event.mode = KeyboardMode::Legacy.into();
@@ -1331,6 +1335,14 @@ fn hangul_key_event(down: bool) -> KeyEvent {
 fn is_local_ime_toggle(code: u32) -> bool {
     const VK_HANGUL: u32 = 0x15;
     code == VK_HANGUL
+}
+
+// X keycode of KEY_HANGEUL. A Right Alt that the keymap turns into Hangul keeps the
+// Right Alt keycode and is not recognized.
+#[cfg(target_os = "linux")]
+fn is_local_ime_toggle(code: u32) -> bool {
+    const X_KEYCODE_HANGUL: u32 = 130;
+    code == X_KEYCODE_HANGUL
 }
 
 #[cfg(target_os = "macos")]

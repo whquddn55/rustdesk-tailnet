@@ -27,6 +27,9 @@ pub mod delegate;
 pub mod linux;
 
 #[cfg(target_os = "linux")]
+pub mod linux_ime;
+
+#[cfg(target_os = "linux")]
 pub mod gtk_sudo;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
