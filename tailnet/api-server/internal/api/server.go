@@ -416,10 +416,11 @@ func (s *Server) abSet(w http.ResponseWriter, r *http.Request) {
 // ---------- ignored ----------
 
 // ignoreJSON accepts audit posts (/api/audit/conn|file|alarm, common.rs:1217-1223,
-// connection.rs:1550-1640) whose responses the client does not use.
+// connection.rs:1550-1640). Success is an empty body: the client retries any
+// other 2xx body for 40s and logs each attempt (connection.rs:1690-1745).
 func (s *Server) ignoreJSON(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, maxJSONBody))
-	writeJSON(w, http.StatusOK, map[string]any{})
+	w.WriteHeader(http.StatusOK)
 }
 
 // record accepts screen-recording upload chunks and drops them. The client only

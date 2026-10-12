@@ -335,31 +335,65 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         newValue[0] != '1') {
       // clipboard
       oldValue = '';
+      _sentinelLength = 0;
     }
+    final (oldTyped, newTyped, intoSentinel) =
+        _splitSentinel(oldValue, newValue);
     final peer = gFFI.ffiModel.pi.platform;
     if (peer == kPeerPlatformMacOS || peer == kPeerPlatformWindows) {
-      _queueImeKeys(_hangulKeys.edit(oldValue, newValue));
+      if (intoSentinel) {
+        _queueImeKeys(_hangulKeys.edit(oldTyped, '') +
+            backspace +
+            _hangulKeys.edit('', newTyped));
+      } else {
+        _queueImeKeys(_hangulKeys.edit(oldTyped, newTyped));
+      }
       _reopenAfterPairedPunctuation(oldValue, newValue);
       return;
     }
     // Diff by common prefix, not length: Korean IMEs rewrite the last syllable
     // in place (ㄱ -> 가 -> 각 -> 가가), and an IME may insert inside paired
     // punctuation ("()" -> "(a)").
-    final oldRunes = oldValue.runes.toList();
-    final newRunes = newValue.runes.toList();
+    final oldRunes = oldTyped.runes.toList();
+    final newRunes = newTyped.runes.toList();
     var common = 0;
-    while (common < oldRunes.length &&
+    while (!intoSentinel &&
+        common < oldRunes.length &&
         common < newRunes.length &&
         oldRunes[common] == newRunes[common]) {
       ++common;
     }
-    final backspaces = oldRunes.length - common;
+    final backspaces = oldRunes.length - common + (intoSentinel ? 1 : 0);
     final content = String.fromCharCodes(newRunes.sublist(common));
     if (backspaces == 0 && content.isEmpty) {
       return;
     }
     _queueSoftKeyboardInput(backspaces, content);
     _reopenAfterPairedPunctuation(oldValue, newValue);
+  }
+
+  // The text field starts with initText so that backspace keeps working once
+  // the user's own text is gone. Those characters are not on the remote side:
+  // deleting any number of them at once (a held backspace deletes them a
+  // "word" at a time) stands for a single backspace there, as upstream does.
+  int _sentinelLength = initText.length;
+
+  (String, String, bool) _splitSentinel(String oldValue, String newValue) {
+    final sentinel = _sentinelLength;
+    var common = 0;
+    while (common < sentinel &&
+        common < oldValue.length &&
+        common < newValue.length &&
+        oldValue.codeUnitAt(common) == newValue.codeUnitAt(common)) {
+      ++common;
+    }
+    final oldTyped =
+        oldValue.length > sentinel ? oldValue.substring(sentinel) : '';
+    if (common >= sentinel) {
+      return (oldTyped, newValue.substring(sentinel), false);
+    }
+    _sentinelLength = common;
+    return (oldTyped, newValue.substring(common), true);
   }
 
   void _reopenAfterPairedPunctuation(String oldValue, String newValue) {
@@ -461,6 +495,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     gFFI.invokeMethod("enable_soft_keyboard", true);
     // destroy first, so that our _value trick can work
     _value = initText;
+    _sentinelLength = initText.length;
     _hangulKeys.reset();
     _textController.text = _value;
     setState(() => _showEdit = false);

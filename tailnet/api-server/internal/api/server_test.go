@@ -415,8 +415,8 @@ func TestHarmlessEndpoints(t *testing.T) {
 		if rec.Code != 200 {
 			t.Errorf("audit/%s: %d", typ, rec.Code)
 		}
-		if _, hasErr := decode[map[string]any](t, rec)["error"]; hasErr {
-			t.Errorf("audit/%s returned error", typ)
+		if body := strings.TrimSpace(rec.Body.String()); body != "" {
+			t.Errorf("audit/%s: body %q, the client retries anything but an empty body", typ, body)
 		}
 	}
 	rec = e.do("PUT", "/api/audit/conn", "", tsIP, `{"note":"x"}`)
