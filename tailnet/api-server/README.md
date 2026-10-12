@@ -1,4 +1,6 @@
-# rustdesk-tailnet-api
+# rustdesk-tailnet API 서버
+
+`rustdesk-tailnet` 저장소의 `tailnet/api-server` 폴더다 (바이너리 · 이미지 이름은 `rustdesk-tailnet-api`).
 
 RustDesk 공식 클라이언트가 그대로 붙는 **자체 API 서버**(Go). Tailscale 망 안에서만 동작한다.
 
@@ -28,10 +30,12 @@ RustDesk 공식 클라이언트가 그대로 붙는 **자체 API 서버**(Go). T
    ```sh
    tailscale ip -4        # 예: 100.101.102.103
    ```
-2. 이 저장소를 서버 PC 에 복사한다. **기존 Key 를 그대로 쓰려면** 처음 띄우기 전에 옛 서버의 키 두 개를 복사해 둔다
+2. 이 폴더만 서버 PC 로 받는다 (RustDesk 소스 전체는 받지 않는다). **기존 Key 를 그대로 쓰려면** 처음 띄우기 전에 옛 서버의 키 두 개를 복사해 둔다
    (hbbs 는 키가 없을 때만 새로 만든다):
    ```sh
-   cd rustdesk-tailnet-api/deploy
+   git clone --filter=blob:none --sparse https://github.com/whquddn55/rustdesk-tailnet.git
+   cd rustdesk-tailnet && git sparse-checkout set tailnet/api-server
+   cd tailnet/api-server/deploy
    mkdir -p data/rustdesk
    cp <옛 서버>/id_ed25519 <옛 서버>/id_ed25519.pub data/rustdesk/
    ```
@@ -64,7 +68,7 @@ hbbs 가 기기에 접속 요청을 전달하지 못한다 (폰에서 `failed to
 ```sh
 sudo sh deploy/firewall.sh
 # 부팅 때 자동으로: root crontab 에 한 줄
-# @reboot sleep 30 && sh /경로/rustdesk-tailnet-api/deploy/firewall.sh
+# @reboot sleep 30 && sh /경로/rustdesk-tailnet/tailnet/api-server/deploy/firewall.sh
 ```
 
 ### 부팅 순서 주의

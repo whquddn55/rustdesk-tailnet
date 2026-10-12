@@ -21,6 +21,10 @@ bash tailnet/apply-patches.sh   # submodule 에 패치 적용 (이미 적용돼 
 bash tailnet/make-patch.sh      # libs/hbb_common 을 고친 뒤 패치 파일 다시 만들기
 ```
 
+## API 서버
+
+`tailnet/api-server` 에 있다 (Go, Docker Compose 로 API · hbbs · hbbr 를 같이 띄운다). 로그인 · 그룹별 기기 목록과, 로그인한 기기에 ID 서버 · 릴레이 · Key 를 내려 주는 일을 한다. 설치는 [tailnet/api-server/README.md](api-server/README.md).
+
 ## 한/영 전환
 
 기기마다 전환 키가 달라도 맞출 필요가 없다. 보내는 쪽이 자기 전환 키를 알아보고, 받는 쪽은 자기 방식으로 전환한다.
