@@ -2494,6 +2494,16 @@ pub fn handle_key_(evt: &KeyEvent) {
         return;
     }
 
+    #[cfg(target_os = "windows")]
+    if let Some(korean) = crate::tailnet::ime_mode_request(evt) {
+        if crate::platform::windows_ime::is_korean_mode() == Some(!korean) {
+            let mut en = ENIGO.lock().unwrap();
+            en.key_down(Key::Hangul).ok();
+            en.key_up(Key::Hangul);
+        }
+        return;
+    }
+
     #[cfg(target_os = "linux")]
     super::uinput::prepare_layout(evt);
 

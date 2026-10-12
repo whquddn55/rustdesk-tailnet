@@ -22,6 +22,7 @@ import '../../models/input_model.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../utils/image.dart';
+import '../hangul_keys.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
 
@@ -335,6 +336,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       // clipboard
       oldValue = '';
     }
+    final peer = gFFI.ffiModel.pi.platform;
+    if (peer == kPeerPlatformMacOS || peer == kPeerPlatformWindows) {
+      _queueImeKeys(_hangulKeys.edit(oldValue, newValue));
+      _reopenAfterPairedPunctuation(oldValue, newValue);
+      return;
+    }
     // Diff by common prefix, not length: Korean IMEs rewrite the last syllable
     // in place (ㄱ -> 가 -> 각 -> 가가), and an IME may insert inside paired
     // punctuation ("()" -> "(a)").
@@ -352,12 +359,31 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       return;
     }
     _queueSoftKeyboardInput(backspaces, content);
+    _reopenAfterPairedPunctuation(oldValue, newValue);
+  }
+
+  void _reopenAfterPairedPunctuation(String oldValue, String newValue) {
     if (oldValue != '' &&
+        newValue.length == oldValue.length + 2 &&
+        newValue.startsWith(oldValue) &&
         const ['""', '()', '[]', '<>', '{}', '”“', '《》', '（）', '【】']
-            .contains(content)) {
+            .contains(newValue.substring(oldValue.length))) {
       // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
       _openKeyboardUnlocked();
     }
+  }
+
+  // Windows and macOS peers compose Hangul with their own IME from 2-set key
+  // presses (see hangul_keys.dart), so nothing flickers while a syllable grows.
+  final _hangulKeys = HangulKeys();
+
+  void _queueImeKeys(String keys) {
+    if (keys.isEmpty) return;
+    _softKeyboardInput = _softKeyboardInput
+        .then((_) => bind.sessionInputImeKeys(sessionId: sessionId, keys: keys))
+        .catchError((e) {
+      debugPrint('soft keyboard input failed: $e');
+    });
   }
 
   // The FFI calls are not ordered among themselves, so when typing fast a
@@ -435,6 +461,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     gFFI.invokeMethod("enable_soft_keyboard", true);
     // destroy first, so that our _value trick can work
     _value = initText;
+    _hangulKeys.reset();
     _textController.text = _value;
     setState(() => _showEdit = false);
     _timer?.cancel();

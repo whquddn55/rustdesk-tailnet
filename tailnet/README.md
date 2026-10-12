@@ -9,7 +9,7 @@ RustDesk 를 Tailscale 전용으로 고친 포크다. 업스트림 `rustdesk/rus
 | Tailscale 강제 (소켓) | `tailnet/hbb_common.patch` → `libs/hbb_common` | TCP 연결 · UDP 송수신 · 서버 주소 해석에서 `100.64.0.0/10` · `fd7a:115c:a1e0::/48` · loopback 밖 주소를 거부한다. websocket · webrtc 엔드포인트와 프록시(SOCKS/HTTP)를 막는다. |
 | Tailscale 강제 (앱) | `src/tailnet.rs` + 얇은 훅 | UDP punch · IPv6 punch · KCP · WebRTC(보내는 쪽 · 받는 쪽) · LAN 탐색을 끄고, 직접 IP 접속(21118)을 켠다. 들어오는 연결도 Tailscale 주소만 받는다 (`src/server.rs`). HTTP(API 서버 · 업데이트 확인)는 Tailscale 주소로 풀리는 이름과 Tailscale IP 만 간다. |
 | 한/영 전환 | `src/keyboard.rs` `ime_toggle_key_events`, `src/platform/macos_ime.rs` | 키를 키로 바꾸지 않고 "입력 소스 전환" 동작을 보낸다 (아래 표). 수동 설정은 없다. |
-| 폰 한글 | `flutter/lib/mobile/pages/remote_page.dart` `_handleNonIOSSoftKeyboardInput`, `_queueSoftKeyboardInput` | Android 키보드가 마지막 글자를 바꿔 쓰는 조합(ㄱ→가→각→가가)을 공통 앞부분 비교로 백스페이스 + 새 글자로 보내고, 입력 호출을 하나씩 차례로 끝낸다. 전에는 글자 수만 비교해 "안녕" 이 "ㅇㄴ" 으로 들어갔고, 빨리 치면 호출 순서가 뒤바뀌어 "아녕" 이 됐다. |
+| 폰 한글 | `flutter/lib/mobile/hangul_keys.dart`, `remote_page.dart`, `src/tailnet.rs` `input_ime_keys` | Windows · macOS 로 접속했을 때 Android 키보드 입력을 두벌식 키 입력(USB HID, 맵 모드)으로 바꿔 보낸다. 받는 쪽 한글 입력기가 직접 조합하므로 글자가 지워졌다 다시 써지지 않는다. 받는 쪽이 조합 중인 음절을 폰에서 따라 계산해 백스페이스는 자모 단위로 필요한 만큼만 보낸다. 한글을 치면 받는 쪽 입력 소스를 한국어로, 영문자를 치면 영문으로 맞춘다 (전환이 아니라 지정이라 어긋나지 않는다). 입력 호출은 하나씩 차례로 끝낸다. 다른 OS 로 접속하면 글자 단위 비교로 보낸다. |
 | 코덱 기본값 | `src/tailnet.rs` | 새로 붙는 기기의 코덱 기본값을 H.264 로 둔다 (사용자가 바꾸면 그 값을 쓴다). |
 | API 서버 기본값 | `src/tailnet.rs`, `tailnet-build.yml` | 빌드 때 `TAILNET_API_SERVER` 를 API 서버 기본값으로 넣는다. 나머지 서버 설정은 계정에서 받는다. |
 | CI | `.github/workflows/flutter-build.yml` | checkout 뒤마다 `tailnet/apply-patches.sh` 로 `hbb_common` 패치를 적용한다. |
@@ -63,4 +63,6 @@ bash tailnet/make-patch.sh      # libs/hbb_common 을 고친 뒤 패치 파일 �
 - 맥에서 Caps Lock 을 전환 키로 쓰면 원격으로는 Caps Lock 잠금을 보낼 수 없다 (누를 때마다 전환으로 보낸다). 맥이 Caps Lock · 🌐 키 이벤트를 RustDesk 에 어떻게 넘기는지는 실기기에서 확인해야 한다.
 - 받는 맥의 입력 소스 전환(TIS)은 이 Mac 에서 별도 실행으로 확인했다 (`2SetKorean → ABC → 2SetKorean`). RustDesk 서버 프로세스 안에서 같은 호출이 되는지는 실기기에서 확인해야 한다.
 - 받는 맥에 한국어 입력 소스가 없으면 전환하지 않고 로그만 남긴다.
+- 폰 한글 키 입력은 받는 쪽이 두벌식 자판, US 배열이라고 가정한다. 받는 쪽에서 마우스로 커서를 옮기는 등 조합이 끊기면 폰 쪽 계산과 어긋날 수 있다 (다음 글자부터 다시 맞는다).
+- 윈도우가 받는 쪽일 때 한/영 지정은 앞 창의 IME 상태(`WM_IME_CONTROL`)를 읽어 다를 때만 한/영 키를 넣는다. 실기기에서 확인해야 한다.
 - HTTP 클라이언트를 만들다 실패해 기본 클라이언트로 떨어지는 경로(`<Client>::new()`)에는 이름 해석 필터가 붙지 않는다. 이름 해석 필터를 붙인 빌더가 실패할 때만 타는 경로다.

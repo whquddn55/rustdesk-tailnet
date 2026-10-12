@@ -693,6 +693,12 @@ pub fn session_input_key(
     }
 }
 
+pub fn session_input_ime_keys(session_id: SessionID, keys: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        crate::tailnet::input_ime_keys(&session, &keys);
+    }
+}
+
 pub fn session_input_string(session_id: SessionID, value: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         // #[cfg(any(target_os = "android", target_os = "ios"))]

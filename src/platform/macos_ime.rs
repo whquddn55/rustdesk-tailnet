@@ -156,6 +156,12 @@ fn parse_hotkey(entry: &plist::Dictionary) -> Option<(u32, u64)> {
 /// Controlled side: a legacy `Hangul` key from the controller switches the input source.
 /// Returns true when the event was handled here.
 pub fn handle_ime_toggle(evt: &KeyEvent) -> bool {
+    if let Some(korean) = crate::tailnet::ime_mode_request(evt) {
+        if let Err(e) = select_korean_input_source(korean) {
+            log::warn!("failed to select input source: {}", e);
+        }
+        return true;
+    }
     if evt.mode.enum_value() != Ok(KeyboardMode::Legacy) {
         return false;
     }
@@ -214,6 +220,22 @@ unsafe fn is_korean(source: TISInputSourceRef) -> bool {
         }
     }
     string_property(source, kTISPropertyInputSourceID).is_some_and(|id| id.contains("Korean"))
+}
+
+fn select_korean_input_source(korean: bool) -> hbb_common::ResultType<()> {
+    let current_korean = unsafe {
+        let current = TISCopyCurrentKeyboardInputSource();
+        if current.is_null() {
+            hbb_common::bail!("no current input source");
+        }
+        let k = is_korean(current);
+        CFRelease(current as CFTypeRef);
+        k
+    };
+    if current_korean == korean {
+        return Ok(());
+    }
+    toggle_korean_input_source()
 }
 
 fn toggle_korean_input_source() -> hbb_common::ResultType<()> {

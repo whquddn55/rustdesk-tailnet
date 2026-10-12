@@ -140,3 +140,106 @@ mod mobile {
         Ok(())
     }
 }
+
+// Absolute input source selection for the soft keyboard's Hangul keys
+// (flutter/lib/mobile/hangul_keys.dart). A plain legacy `Hangul` key toggles; with
+// `press` set it selects: Korean when Shift is among the modifiers, English otherwise.
+#[allow(dead_code)]
+pub fn ime_mode_event(korean: bool) -> base::message_proto::KeyEvent {
+    use base::message_proto::{ControlKey, KeyEvent, KeyboardMode};
+    let mut evt = KeyEvent::new();
+    evt.mode = KeyboardMode::Legacy.into();
+    evt.down = true;
+    evt.press = true;
+    evt.set_control_key(ControlKey::Hangul);
+    if korean {
+        evt.modifiers.push(ControlKey::Shift.into());
+    }
+    evt
+}
+
+#[allow(dead_code)]
+pub fn ime_mode_request(evt: &base::message_proto::KeyEvent) -> Option<bool> {
+    use base::message_proto::{key_event, ControlKey, KeyboardMode};
+    if !evt.press || evt.mode.enum_value() != Ok(KeyboardMode::Legacy) {
+        return None;
+    }
+    match &evt.union {
+        Some(key_event::Union::ControlKey(ck)) if ck.enum_value() == Ok(ControlKey::Hangul) => {
+            Some(
+                evt.modifiers
+                    .iter()
+                    .any(|m| m.enum_value() == Ok(ControlKey::Shift)),
+            )
+        }
+        _ => None,
+    }
+}
+
+/// Types the output of `HangulKeys.edit` as physical key presses (USB HID codes in map
+/// mode), so the controlled side's own IME composes the text.
+#[cfg(feature = "flutter")]
+pub fn input_ime_keys<T: crate::ui_session_interface::InvokeUiSession>(
+    session: &crate::ui_session_interface::Session<T>,
+    keys: &str,
+) {
+    const HID_LEFT_SHIFT: i32 = 0xE1;
+    let key = |hid: i32, down: bool| session.handle_flutter_key_event("map", "", hid, 0, down);
+    let mut text = String::new();
+    for c in keys.chars() {
+        let hid = us_key(c);
+        if !text.is_empty() && (hid.is_some() || c == '\u{1}' || c == '\u{2}') {
+            session.input_string(&std::mem::take(&mut text));
+        }
+        match (c, hid) {
+            ('\u{1}', _) | ('\u{2}', _) => session.send_key_event(&ime_mode_event(c == '\u{1}')),
+            (_, Some((hid, shift))) => {
+                if shift {
+                    key(HID_LEFT_SHIFT, true);
+                }
+                key(hid, true);
+                key(hid, false);
+                if shift {
+                    key(HID_LEFT_SHIFT, false);
+                }
+            }
+            _ => text.push(c),
+        }
+    }
+    if !text.is_empty() {
+        session.input_string(&text);
+    }
+}
+
+/// USB HID usage and Shift for a character on a US keyboard.
+#[cfg(feature = "flutter")]
+fn us_key(c: char) -> Option<(i32, bool)> {
+    const ROW: &str = "1234567890";
+    const SHIFTED_ROW: &str = "!@#$%^&*()";
+    const PUNCT: &str = "-=[]\\;'`,./";
+    const SHIFTED_PUNCT: &str = "_+{}|:\"~<>?";
+    const PUNCT_HID: [i32; 11] = [
+        0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
+    ];
+    Some(match c {
+        'a'..='z' => (0x04 + (c as i32 - 'a' as i32), false),
+        'A'..='Z' => (0x04 + (c as i32 - 'A' as i32), true),
+        '\u{8}' => (0x2A, false),
+        '\n' => (0x28, false),
+        '\t' => (0x2B, false),
+        ' ' => (0x2C, false),
+        _ => {
+            if let Some(i) = ROW.find(c) {
+                (0x1E + i as i32, false)
+            } else if let Some(i) = SHIFTED_ROW.find(c) {
+                (0x1E + i as i32, true)
+            } else if let Some(i) = PUNCT.find(c) {
+                (PUNCT_HID[i], false)
+            } else if let Some(i) = SHIFTED_PUNCT.find(c) {
+                (PUNCT_HID[i], true)
+            } else {
+                return None;
+            }
+        }
+    })
+}
