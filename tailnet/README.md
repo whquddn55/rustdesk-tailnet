@@ -49,7 +49,11 @@ bash tailnet/make-patch.sh      # libs/hbb_common 을 고친 뒤 패치 파일 �
 
 ## 빌드
 
-로컬 빌드는 vcpkg · Flutter 가 필요해서 GitHub Actions 로 빌드한다. `tailnet-build` 워크플로(수동 실행)가 Windows x64 · macOS arm64 · Android arm64 를 만들어 Release `tailnet-latest` 와 Actions 산출물로 올린다. 원본의 다른 워크플로는 저장소에서 꺼 두었다. 서명하지 않은 빌드라 맥은 Gatekeeper, 윈도우는 SmartScreen 경고가 뜬다. iOS 는 Apple 개발자 계정이 있어야 설치할 수 있다.
+로컬 빌드는 vcpkg · Flutter 가 필요해서 GitHub Actions 로 빌드한다. `tailnet-build` 워크플로(수동 실행)가 Windows x64 · macOS arm64 · Android arm64 를 만들어 Release `tailnet-b<실행 번호>` 와 Actions 산출물로 올린다. 원본의 다른 워크플로는 저장소에서 꺼 두었다.
+
+- 버전: RustDesk 버전(`1.5.0`)은 원본 그대로 둔다. 상대 기기가 이 값으로 기능 지원 여부를 판단하기 때문이다. 대신 빌드 번호 `1000 + 실행 번호` 를 Flutter 빌드 번호로 넣는다 (Android `versionCode`, macOS `CFBundleVersion`, Windows 파일 버전 넷째 자리). `tailnet/apply-patches.sh` 가 `TAILNET_BUILD_NUMBER` 를 보고 `flutter/pubspec.yaml` 을 고친다.
+- Android 서명: 저장소 비밀 값 `ANDROID_SIGNING_KEY` · `ANDROID_ALIAS` · `ANDROID_KEY_STORE_PASSWORD` · `ANDROID_KEY_PASSWORD` 의 고정 키로 서명해, 새 APK 를 지우지 않고 덮어써 업데이트한다. 키 파일을 잃으면 다시 지우고 설치해야 하므로 따로 백업한다.
+- 서명하지 않은 데스크톱 빌드라 맥은 처음 열 때 우클릭 → 열기, 윈도우는 SmartScreen 의 "추가 정보 → 실행" 이 필요하다. iOS 는 Apple 개발자 계정이 있어야 설치할 수 있다.
 
 ## 검증한 것
 

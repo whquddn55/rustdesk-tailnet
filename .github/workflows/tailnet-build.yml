@@ -10,8 +10,9 @@ on:
         type: boolean
         default: true
       upload-tag:
+        description: "Release tag (default: tailnet-b<run number>)"
         type: string
-        default: "nightly"
+        default: ""
 
 # NOTE: F-Droid builder script 'flutter/build_fdroid.sh' reads environment
 # variables from this workflow!
@@ -37,7 +38,11 @@ env:
   FLUTTER_WINDOWS_ARM_VERSION: "3.44.9"
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
-  TAG_NAME: "${{ inputs.upload-tag }}"
+  TAG_NAME: "${{ inputs.upload-tag || format('tailnet-b{0}', github.run_number) }}"
+  # Build number of this fork: Android versionCode 1000+N, macOS CFBundleVersion,
+  # Windows file version 1.5.0.N (set in tailnet/apply-patches.sh). The RustDesk
+  # version itself stays as upstream: peers compare it to pick protocol features.
+  TAILNET_BUILD_NUMBER: "${{ github.run_number }}"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   # vcpkg version: 2026.07.29
   # If we change the `VCPKG COMMIT_ID`, please remember:
