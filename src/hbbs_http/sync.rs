@@ -105,6 +105,9 @@ async fn start_hbbs_sync_async() {
                     continue;
                 }
                 let conns = Connection::alive_conns();
+                if crate::tailnet::device_name_changed() {
+                    info_uploaded.uploaded = false;
+                }
                 if info_uploaded.uploaded && (url != info_uploaded.url || id != info_uploaded.id) {
                     info_uploaded.uploaded = false;
                     *PRO.lock().unwrap() = false;

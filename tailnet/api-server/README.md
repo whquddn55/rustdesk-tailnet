@@ -136,6 +136,25 @@ rdapi device del 123456789
 
 > 서버의 `TS_IP`/`LISTEN_ADDR` 은 반드시 IP 숫자로 넣는다. MagicDNS 이름은 `SERVER_HOST` 와 클라이언트 쪽에만 쓴다.
 
+## 업데이트 확인
+
+`/api/tailnet/latest` 가 클라이언트 최신 빌드를 알려 준다. GitHub Release(`GITHUB_REPO`, 기본 `whquddn55/rustdesk-tailnet`)의 `tailnet-b<N>` 중 가장 큰 N 을 10분마다 읽어 온다. `GITHUB_REPO=-` 면 끈다.
+
+## 서버 이전 (기기를 손대지 않고 옮기기)
+
+로그인한 기기는 접속 알림 응답으로 서버 주소를 받아 저장하므로, 옛 API 서버가 새 서버 주소를 내려 주면 기기가 스스로 옮겨 간다.
+
+1. 새 서버를 띄운다. 키(`data/rustdesk/id_ed25519*`)와 옛 서버의 계정 DB(API 볼륨의 `api.db`)를 복사해 두면 다시 로그인할 필요가 없다.
+2. 옛 서버의 `.env` 에 새 서버를 적고 다시 띄운다. 옛 서버는 자기 주소에서 계속 받되 새 주소를 내려 준다:
+   ```sh
+   PUSH_SERVER_HOST=새서버.tailXXXX.ts.net
+   # 새 서버가 기본 포트가 아니면: PUSH_API_PORT=... PUSH_HBBS_PORT=... PUSH_HBBR_PORT=...
+   docker compose up -d
+   ```
+3. 켜져 있는 기기는 다음 접속 알림(15초 안팎)에 옮겨 간다. 꺼져 있던 기기도 켜질 때 옮겨 가도록 며칠 둔 뒤 옛 서버를 내린다.
+
+로그인하지 않은 기기(서버 칸을 손으로 채운 기기)는 옮겨지지 않는다.
+
 ## 공유기 포트 포워딩을 닫을 것
 
 모든 접속은 Tailscale 로만 오므로 공유기에 열어 둔 포트 포워딩이 있으면 지운다.

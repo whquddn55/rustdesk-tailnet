@@ -53,6 +53,9 @@ Environment:
   HBBS_KEY_FILE   hbbs public key file pushed as the client Key, e.g. /rustdesk/id_ed25519.pub
   HBBS_PORT       hbbs ID port the devices use (default 21116; NAT test port is one below)
   HBBR_PORT       hbbr relay port the devices use (default 21117)
+  PUSH_SERVER_HOST, PUSH_API_PORT, PUSH_HBBS_PORT, PUSH_HBBR_PORT
+                  hand out another server's address instead (moving devices; ports default to 21114/21116/21117)
+  GITHUB_REPO     client builds for the update check (default whquddn55/rustdesk-tailnet, "-" disables)
 `
 
 func dbPath() string {
@@ -128,6 +131,18 @@ func serverConfig() (listen string, policy netguard.Policy, ttl time.Duration, e
 	return
 }
 
+// releasesURL is where the update check looks for client builds.
+func releasesURL() string {
+	repo := os.Getenv("GITHUB_REPO")
+	switch repo {
+	case "":
+		repo = "whquddn55/rustdesk-tailnet"
+	case "-":
+		return ""
+	}
+	return "https://api.github.com/repos/" + repo + "/releases?per_page=30"
+}
+
 // serverSettings is what logged-in devices receive as their ID / relay / API
 // server and key (see api.ServerSettings).
 func serverSettings(listen string) api.ServerSettings {
@@ -139,6 +154,14 @@ func serverSettings(listen string) api.ServerSettings {
 	apiPort, _ := strconv.Atoi(listenPort)
 	idPort, _ := strconv.Atoi(os.Getenv("HBBS_PORT"))
 	relayPort, _ := strconv.Atoi(os.Getenv("HBBR_PORT"))
+	// PUSH_* move every logged-in device to another server: this instance keeps
+	// serving on its own address but hands out the new one (see README, 서버 이전).
+	if v := os.Getenv("PUSH_SERVER_HOST"); v != "" {
+		host = v
+		apiPort, _ = strconv.Atoi(os.Getenv("PUSH_API_PORT"))
+		idPort, _ = strconv.Atoi(os.Getenv("PUSH_HBBS_PORT"))
+		relayPort, _ = strconv.Atoi(os.Getenv("PUSH_HBBR_PORT"))
+	}
 	return api.ServerSettings{
 		Host: host, KeyFile: os.Getenv("HBBS_KEY_FILE"),
 		APIPort: apiPort, IDPort: idPort, RelayPort: relayPort,
@@ -172,7 +195,7 @@ func serve(args []string) error {
 		logger.Printf("WARNING: HBBS_KEY_FILE is not set; devices will not receive the server key.")
 	}
 	srv := &http.Server{
-		Handler:           api.New(api.Config{Store: st, Guard: policy, TokenTTL: ttl, Logger: logger, Settings: settings}),
+		Handler:           api.New(api.Config{Store: st, Guard: policy, TokenTTL: ttl, Logger: logger, Settings: settings, ReleasesURL: releasesURL()}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      60 * time.Second,

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common/widgets/device_name.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
@@ -415,6 +416,7 @@ class _GeneralState extends State<_General> {
         if (!isWeb) service(),
         theme(),
         _Card(title: 'Language', children: [language()]),
+        if (!isWeb) deviceName(),
         if (!isWeb) hwcodec(),
         if (!isWeb) audio(context),
         if (!isWeb) record(context),
@@ -422,6 +424,17 @@ class _GeneralState extends State<_General> {
         other()
       ],
     ).marginOnly(bottom: _kListViewBottomMargin);
+  }
+
+  Widget deviceName() {
+    final name = bind.mainGetOptionSync(key: kOptionPresetDeviceName);
+    return _Card(title: 'Device name', children: [
+      ListTile(
+        title: Text(name.isEmpty ? '-' : name),
+        trailing: const Icon(Icons.edit),
+        onTap: () => showDeviceNameDialog(onChanged: () => setState(() {})),
+      ),
+    ]);
   }
 
   Widget theme() {

@@ -243,3 +243,51 @@ fn us_key(c: char) -> Option<(i32, bool)> {
         }
     })
 }
+
+/// True once each time this device's name (`preset-device-name`) changed, so the
+/// system info, which carries it as the hostname, is uploaded again.
+pub fn device_name_changed() -> bool {
+    use hbb_common::config::Config;
+    lazy_static::lazy_static! {
+        static ref LAST: std::sync::Mutex<Option<String>> = Default::default();
+    }
+    let name = Config::get_option(keys::OPTION_PRESET_DEVICE_NAME);
+    let mut last = LAST.lock().unwrap();
+    let changed = last.as_ref().is_some_and(|l| *l != name);
+    *last = Some(name);
+    changed
+}
+
+/// Update check against our API server instead of api.rustdesk.com: it reports the
+/// newest `tailnet-b<N>` release, compared with this build's CI run number.
+pub async fn check_software_update() -> hbb_common::ResultType<()> {
+    use hbb_common::config::Config;
+    let Some(own) = option_env!("TAILNET_BUILD_NUMBER").and_then(|n| n.parse::<i64>().ok()) else {
+        return Ok(()); // local build
+    };
+    let api = crate::common::get_api_server(
+        Config::get_option("api-server"),
+        Config::get_option("custom-rendezvous-server"),
+    );
+    if api.is_empty() {
+        return Ok(());
+    }
+    let resp =
+        crate::post_request(format!("{api}/api/tailnet/latest"), "{}".to_owned(), "").await?;
+    let latest: serde_json::Value = serde_json::from_str(&resp)?;
+    let build = latest["build"].as_i64().unwrap_or(0);
+    let url = latest["url"].as_str().unwrap_or_default().to_owned();
+    if build > own && !url.is_empty() {
+        log::info!("update available: build {} > {}", build, own);
+        #[cfg(feature = "flutter")]
+        {
+            let event = serde_json::json!({"name": "check_software_update_finish", "url": url});
+            let _ =
+                crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, event.to_string());
+        }
+        *crate::common::SOFTWARE_UPDATE_URL.lock().unwrap() = url;
+    } else {
+        crate::common::SOFTWARE_UPDATE_URL.lock().unwrap().clear();
+    }
+    Ok(())
+}

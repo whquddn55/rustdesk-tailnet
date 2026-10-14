@@ -31,17 +31,21 @@ type Config struct {
 	TokenTTL time.Duration
 	Logger   *log.Logger
 	Settings ServerSettings
+	// ReleasesURL is the GitHub releases API URL of the client builds; empty
+	// disables the update check.
+	ReleasesURL string
 }
 
 // Server is the HTTP handler.
 type Server struct {
-	st     *store.Store
-	guard  netguard.Policy
-	ttl    time.Duration
-	log    *log.Logger
-	cfg    ServerSettings
-	mux    *http.ServeMux
-	handle http.Handler
+	st       *store.Store
+	guard    netguard.Policy
+	ttl      time.Duration
+	log      *log.Logger
+	cfg      ServerSettings
+	releases *releases
+	mux      *http.ServeMux
+	handle   http.Handler
 }
 
 // New builds the handler. Every route sits behind the Tailscale guard.
@@ -52,7 +56,7 @@ func New(cfg Config) *Server {
 	if cfg.Logger == nil {
 		cfg.Logger = log.New(io.Discard, "", 0)
 	}
-	s := &Server{st: cfg.Store, guard: cfg.Guard, ttl: cfg.TokenTTL, log: cfg.Logger, cfg: cfg.Settings, mux: http.NewServeMux()}
+	s := &Server{st: cfg.Store, guard: cfg.Guard, ttl: cfg.TokenTTL, log: cfg.Logger, cfg: cfg.Settings, releases: newReleases(cfg.ReleasesURL), mux: http.NewServeMux()}
 	s.routes()
 	s.handle = cfg.Guard.Middleware(s.mux)
 	return s
@@ -70,6 +74,7 @@ func (s *Server) routes() {
 
 	// Device registration (unauthenticated in the client: sync.rs:211,245 pass "" as header)
 	m.HandleFunc("POST /api/heartbeat", s.heartbeat)
+	m.HandleFunc("/api/tailnet/latest", s.latestBuild)
 	m.HandleFunc("POST /api/sysinfo", s.sysinfo)
 	m.HandleFunc("POST /api/sysinfo_ver", s.sysinfoVer)
 

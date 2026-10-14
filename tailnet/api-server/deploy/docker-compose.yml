@@ -25,6 +25,12 @@ services:
       HBBS_KEY_FILE: /rustdesk/id_ed25519.pub
       HBBS_PORT: "${HBBS_PORT:-21116}"
       HBBR_PORT: "${HBBR_PORT:-21117}"
+      # Moving every logged-in device to another server (README, 서버 이전).
+      PUSH_SERVER_HOST: "${PUSH_SERVER_HOST:-}"
+      PUSH_API_PORT: "${PUSH_API_PORT:-}"
+      PUSH_HBBS_PORT: "${PUSH_HBBS_PORT:-}"
+      PUSH_HBBR_PORT: "${PUSH_HBBR_PORT:-}"
+      GITHUB_REPO: "${GITHUB_REPO:-}"
     volumes:
       - api-data:/data
       - ./data/rustdesk:/rustdesk:ro

@@ -43,6 +43,28 @@ bash tailnet/make-patch.sh      # libs/hbb_common 을 고친 뒤 패치 파일 �
 
 같은 OS 끼리(윈도우 → 윈도우, 리눅스 → 리눅스)는 원래 동작을 그대로 쓴다. 키를 누르고 있어 반복 입력이 들어와도 한 번만 전환한다.
 
+## 설치 · 업데이트
+
+최신 `tailnet-b<N>` 빌드를 받아 설치한다. 업데이트도 같은 명령이다.
+
+| OS | 명령 |
+|---|---|
+| macOS | `curl -fsSL https://raw.githubusercontent.com/whquddn55/rustdesk-tailnet/tailnet/tailnet/install/mac.sh \| sh` |
+| Linux (apt · dnf) | `curl -fsSL https://raw.githubusercontent.com/whquddn55/rustdesk-tailnet/tailnet/tailnet/install/linux.sh \| sh` |
+| Windows (PowerShell) | `irm https://raw.githubusercontent.com/whquddn55/rustdesk-tailnet/tailnet/tailnet/install/windows.ps1 \| iex` |
+| Android | Release 의 `*-signed.apk` 를 받아 덮어 설치한다 |
+
+- 맥: 브라우저로 받은 앱은 격리 표시 때문에 macOS 가 "손상됨" 으로 막는다 (Apple 개발자 서명이 아니어서). `curl` 로 받으면 격리 표시가 붙지 않는다. 앱은 고정된 자체 서명 인증서로 서명해서, 업데이트해도 화면 기록 · 손쉬운 사용 권한이 유지된다.
+- 윈도우: PowerShell 로 받은 파일에는 웹 표시(Mark of the Web)가 없어 SmartScreen 경고 없이 설치된다 (`--silent-install`).
+
+## 기기 이름
+
+설정의 **기기 이름** 에 정한 이름(`preset-device-name`)이 다른 사람의 그룹 목록에 보인다. 비우면 호스트 이름을 쓴다. 바꾸면 다음 접속 알림 때 기기 정보를 다시 올린다 (`src/tailnet.rs` `device_name_changed`).
+
+## 업데이트 확인
+
+`api.rustdesk.com` 대신 API 서버의 `/api/tailnet/latest` 에 묻는다 (`src/tailnet.rs` `check_software_update`). API 서버가 GitHub Release 의 `tailnet-b<N>` 중 가장 큰 N 을 알려 주고, 이 빌드의 실행 번호(`TAILNET_BUILD_NUMBER`)보다 크면 앱에 업데이트 알림이 뜬다. 알림을 누르면 Release 페이지가 열린다 (앱 안 내려받기는 쓰지 않는다).
+
 ## 기기 설정
 
 설치하고 로그인만 한다.
@@ -58,6 +80,7 @@ bash tailnet/make-patch.sh      # libs/hbb_common 을 고친 뒤 패치 파일 �
 로컬 빌드는 vcpkg · Flutter 가 필요해서 GitHub Actions 로 빌드한다. `tailnet-build` 워크플로(수동 실행)가 Windows x64 · macOS arm64 · Android arm64 · Linux x64 를 만들어 Release `tailnet-b<실행 번호>` 와 Actions 산출물로 올린다. 원본의 다른 워크플로는 저장소에서 꺼 두었다.
 
 - 버전: RustDesk 버전(`1.5.0`)은 원본 그대로 둔다. 상대 기기가 이 값으로 기능 지원 여부를 판단하기 때문이다. 대신 빌드 번호 `1000 + 실행 번호` 를 Flutter 빌드 번호로 넣는다 (Android `versionCode`, macOS `CFBundleVersion`, Windows 파일 버전 넷째 자리). `tailnet/apply-patches.sh` 가 `TAILNET_BUILD_NUMBER` 를 보고 `flutter/pubspec.yaml` 을 고친다.
+- 맥 서명: 저장소 비밀 값 `MACOS_SELF_P12` · `MACOS_SELF_P12_PASSWORD` 의 자체 서명 인증서(`CN=rustdesk-tailnet`)로 서명한다. 인증서가 같으면 macOS 가 권한을 유지하므로, 이 인증서도 Android 키처럼 따로 백업한다.
 - Android 서명: 저장소 비밀 값 `ANDROID_SIGNING_KEY` · `ANDROID_ALIAS` · `ANDROID_KEY_STORE_PASSWORD` · `ANDROID_KEY_PASSWORD` 의 고정 키로 서명해, 새 APK 를 지우지 않고 덮어써 업데이트한다. 키 파일을 잃으면 다시 지우고 설치해야 하므로 따로 백업한다.
 - 서명하지 않은 데스크톱 빌드라 맥은 처음 열 때 우클릭 → 열기, 윈도우는 SmartScreen 의 "추가 정보 → 실행" 이 필요하다. iOS 는 Apple 개발자 계정이 있어야 설치할 수 있다.
 

@@ -10,6 +10,11 @@ import 'package:url_launcher/url_launcher.dart';
 final _isExtracting = false.obs;
 
 void handleUpdate(String releasePageUrl) {
+  // tailnet fork: the URL is our GitHub release page (from our API server). The
+  // in-app download below expects upstream's file names and reaches GitHub,
+  // which this build does not, so open the page and use the install script.
+  launchUrl(Uri.parse(releasePageUrl));
+  return;
   _isExtracting.value = false;
   String downloadUrl = releasePageUrl.replaceAll('tag', 'download');
   String version = downloadUrl.substring(downloadUrl.lastIndexOf('/') + 1);

@@ -609,14 +609,35 @@ jobs:
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
+        env:
+          MACOS_SELF_P12: ${{ secrets.MACOS_SELF_P12 }}
+          MACOS_SELF_P12_PASSWORD: ${{ secrets.MACOS_SELF_P12_PASSWORD }}
         run: |
           CREATE_DMG="$(command -v create-dmg)"
           CREATE_DMG="$(readlink -f "$CREATE_DMG")"
           sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
-          # Without a Developer ID the build leaves a broken ad-hoc seal, which Gatekeeper
-          # reports as "damaged". Re-seal ad-hoc so right-click > Open works.
-          codesign --force --deep --sign - ./flutter/build/macos/Build/Products/Release/RustDesk.app
-          codesign --verify --deep --strict ./flutter/build/macos/Build/Products/Release/RustDesk.app
+          # Without a Developer ID the build leaves a broken ad-hoc seal. Re-seal with our
+          # self-signed certificate: its designated requirement stays the same across builds,
+          # so macOS keeps the Screen Recording / Accessibility grants after an update.
+          APP=./flutter/build/macos/Build/Products/Release/RustDesk.app
+          if [ -n "${MACOS_SELF_P12:-}" ]; then
+            KC="$RUNNER_TEMP/tailnet.keychain-db"
+            KCPW=$(openssl rand -hex 16)
+            security create-keychain -p "$KCPW" "$KC"
+            security set-keychain-settings "$KC"
+            security unlock-keychain -p "$KCPW" "$KC"
+            echo "$MACOS_SELF_P12" | base64 --decode > "$RUNNER_TEMP/self.p12"
+            security import "$RUNNER_TEMP/self.p12" -k "$KC" -P "$MACOS_SELF_P12_PASSWORD" -T /usr/bin/codesign
+            rm -f "$RUNNER_TEMP/self.p12"
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCPW" "$KC" > /dev/null
+            security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+            ID=$(security find-identity -p codesigning "$KC" | awk '/"rustdesk-tailnet"/ {print $2; exit}')
+            codesign --force --deep --sign "$ID" "$APP"
+          else
+            codesign --force --deep --sign - "$APP"
+          fi
+          codesign --verify --deep --strict "$APP"
+          codesign -d -r- "$APP"
           create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk.app
 
       - name: Upload unsigned macOS app
@@ -1086,6 +1107,7 @@ jobs:
             --volume "${PWD}:/workspace"
             --volume "/opt/artifacts:/opt/artifacts"
             --env TAILNET_API_SERVER
+            --env TAILNET_BUILD_NUMBER
           shell: /bin/bash
           install: |
             apt-get update -y
